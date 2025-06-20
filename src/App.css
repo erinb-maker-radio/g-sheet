@@ -1,38 +1,161 @@
-.App {
-  text-align: center;
+/* App.css - Clean Dashboard Styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
 }
 
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #0a0a0a;
+  color: #ffffff;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
-}
-
-.App-header {
-  background-color: #282c34;
+.app {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+}
+
+/* Header */
+.header {
+  background: linear-gradient(135deg, #e91e63, #9c27b0);
+  padding: 20px 40px;
+  box-shadow: 0 2px 20px rgba(233, 30, 99, 0.3);
+}
+
+.header h1 {
+  font-size: 32px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.status-info {
+  font-size: 14px;
+  opacity: 0.9;
+}
+
+/* Main Content */
+.main {
+  flex: 1;
+  padding: 40px;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.loading {
+  text-align: center;
+  font-size: 24px;
+  color: #666;
+  padding: 100px;
+}
+
+.broadcasts h2 {
+  font-size: 28px;
+  margin-bottom: 30px;
+  color: #e91e63;
+}
+
+.no-broadcasts {
+  text-align: center;
+  color: #666;
+  font-size: 18px;
+  padding: 60px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 15px;
+}
+
+/* Performer Groups */
+.performer-group {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 15px;
+  padding: 25px;
+  margin-bottom: 25px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.performer-group h3 {
+  font-size: 22px;
+  margin-bottom: 15px;
+  color: #fff;
+}
+
+.broadcast-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Broadcast Items */
+.broadcast {
+  background: rgba(255, 255, 255, 0.08);
+  padding: 15px 20px;
+  border-radius: 10px;
+  transition: all 0.3s ease;
+}
+
+.broadcast:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.broadcast.live {
+  border: 2px solid #4CAF50;
+  background: rgba(76, 175, 80, 0.1);
+}
+
+.broadcast-info {
+  display: flex;
+  justify-content: space-between;
   align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 2vmin);
+}
+
+.song-title {
+  font-size: 18px;
+  font-weight: 500;
+}
+
+/* Status Badges */
+.status-badge {
+  padding: 5px 15px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.status-badge.created {
+  background: #2196F3;
   color: white;
 }
 
-.App-link {
-  color: #61dafb;
+.status-badge.ready {
+  background: #FF9800;
+  color: white;
 }
 
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+.status-badge.testing {
+  background: #9C27B0;
+  color: white;
+}
+
+.status-badge.live {
+  background: #4CAF50;
+  color: white;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.7; }
+  100% { opacity: 1; }
+}
+
+/* Footer */
+.footer {
+  background: rgba(255, 255, 255, 0.05);
+  padding: 20px;
+  text-align: center;
+  color: #666;
+  font-size: 14px;
 }
