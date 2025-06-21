@@ -319,7 +319,7 @@ class YouTubeService {
     }
   }
 
-  // NEW METHOD: Transition broadcast to different status (testing, live, complete)
+  // Transition broadcast to different status (testing, live, complete)
   async transitionBroadcast(broadcastId, status) {
     if (!this.isSignedIn) {
       return { success: false, error: 'Not signed in to YouTube' };
@@ -345,7 +345,7 @@ class YouTubeService {
     }
   }
 
-  // NEW METHOD: Get broadcast details including parsed lower thirds data
+  // Get broadcast details including parsed lower thirds data
   async getBroadcastDetails(broadcastId) {
     if (!this.isSignedIn) {
       return { success: false, error: 'Not signed in to YouTube' };
@@ -395,6 +395,189 @@ class YouTubeService {
       return { success: false, error: 'Broadcast not found or title format unrecognized' };
     } catch (error) {
       console.error('Error getting broadcast details:', error);
+      return { 
+        success: false, 
+        error: error.result?.error?.message || error.message 
+      };
+    }
+  }
+
+  // NEW METHOD: Get broadcast status including stream status
+  async getBroadcastStatus(broadcastId) {
+    if (!this.isSignedIn) {
+      return { success: false, error: 'Not signed in to YouTube' };
+    }
+
+    try {
+      const response = await gapi.client.youtube.liveBroadcasts.list({
+        part: 'snippet,status,contentDetails',
+        id: broadcastId
+      });
+
+      if (response.result.items && response.result.items.length > 0) {
+        const broadcast = response.result.items[0];
+        
+        return {
+          success: true,
+          broadcastId: broadcast.id,
+          title: broadcast.snippet.title,
+          description: broadcast.snippet.description,
+          lifeCycleStatus: broadcast.status.lifeCycleStatus,
+          privacyStatus: broadcast.status.privacyStatus,
+          recordingStatus: broadcast.status.recordingStatus,
+          streamStatus: broadcast.contentDetails?.streamStatus || 'unknown',
+          actualStartTime: broadcast.snippet.actualStartTime,
+          actualEndTime: broadcast.snippet.actualEndTime,
+          scheduledStartTime: broadcast.snippet.scheduledStartTime
+        };
+      }
+      
+      return { success: false, error: 'Broadcast not found' };
+    } catch (error) {
+      console.error('Error getting broadcast status:', error);
+      return { 
+        success: false, 
+        error: error.result?.error?.message || error.message 
+      };
+    }
+  }
+
+  // NEW METHOD: Check if broadcast is currently live
+  async isBroadcastLive(broadcastId) {
+    const status = await this.getBroadcastStatus(broadcastId);
+    return status.success && status.lifeCycleStatus === 'live';
+  }
+
+  // NEW METHOD: Get detailed stream health information
+  async getStreamHealth(broadcastId) {
+    if (!this.isSignedIn) {
+      return { success: false, error: 'Not signed in to YouTube' };
+    }
+
+    try {
+      // Get broadcast details first
+      const broadcastStatus = await this.getBroadcastStatus(broadcastId);
+      if (!broadcastStatus.success) {
+        return broadcastStatus;
+      }
+
+      // Get the bound stream ID
+      const broadcastResponse = await gapi.client.youtube.liveBroadcasts.list({
+        part: 'contentDetails',
+        id: broadcastId
+      });
+
+      if (!broadcastResponse.result.items || broadcastResponse.result.items.length === 0) {
+        return { success: false, error: 'Broadcast not found' };
+      }
+
+      const streamId = broadcastResponse.result.items[0].contentDetails.boundStreamId;
+      
+      if (!streamId) {
+        return { 
+          success: true, 
+          ...broadcastStatus,
+          streamHealth: 'No stream bound',
+          streamId: null
+        };
+      }
+
+      // Get stream health
+      const streamResponse = await gapi.client.youtube.liveStreams.list({
+        part: 'status,cdn',
+        id: streamId
+      });
+
+      if (streamResponse.result.items && streamResponse.result.items.length > 0) {
+        const stream = streamResponse.result.items[0];
+        
+        return {
+          success: true,
+          ...broadcastStatus,
+          streamId: streamId,
+          streamHealth: stream.status?.streamStatus || 'unknown',
+          ingestionInfo: stream.cdn?.ingestionInfo || null
+        };
+      }
+      
+      return {
+        success: true,
+        ...broadcastStatus,
+        streamId: streamId,
+        streamHealth: 'Stream not found'
+      };
+
+    } catch (error) {
+      console.error('Error getting stream health:', error);
+      return { 
+        success: false, 
+        error: error.result?.error?.message || error.message 
+      };
+    }
+  }
+
+  // NEW METHOD: Monitor broadcast status with callback
+  startStatusMonitoring(broadcastId, callback, interval = 3000) {
+    const monitor = setInterval(async () => {
+      try {
+        const status = await this.getBroadcastStatus(broadcastId);
+        callback(status);
+        
+        // Stop monitoring if broadcast is complete
+        if (status.success && status.lifeCycleStatus === 'complete') {
+          clearInterval(monitor);
+        }
+      } catch (error) {
+        console.error('Error in status monitoring:', error);
+        callback({ success: false, error: error.message });
+      }
+    }, interval);
+
+    return monitor; // Return interval ID so it can be cleared
+  }
+
+  // NEW METHOD: Bulk status check for multiple broadcasts
+  async getBulkBroadcastStatus(broadcastIds) {
+    if (!this.isSignedIn) {
+      return { success: false, error: 'Not signed in to YouTube' };
+    }
+
+    try {
+      // YouTube API allows up to 50 IDs in one request
+      const chunks = [];
+      for (let i = 0; i < broadcastIds.length; i += 50) {
+        chunks.push(broadcastIds.slice(i, i + 50));
+      }
+
+      const allResults = [];
+      
+      for (const chunk of chunks) {
+        const response = await gapi.client.youtube.liveBroadcasts.list({
+          part: 'snippet,status,contentDetails',
+          id: chunk.join(',')
+        });
+
+        if (response.result.items) {
+          allResults.push(...response.result.items);
+        }
+      }
+
+      return {
+        success: true,
+        broadcasts: allResults.map(broadcast => ({
+          broadcastId: broadcast.id,
+          title: broadcast.snippet.title,
+          lifeCycleStatus: broadcast.status.lifeCycleStatus,
+          privacyStatus: broadcast.status.privacyStatus,
+          recordingStatus: broadcast.status.recordingStatus,
+          streamStatus: broadcast.contentDetails?.streamStatus || 'unknown',
+          actualStartTime: broadcast.snippet.actualStartTime,
+          actualEndTime: broadcast.snippet.actualEndTime
+        }))
+      };
+
+    } catch (error) {
+      console.error('Error getting bulk broadcast status:', error);
       return { 
         success: false, 
         error: error.result?.error?.message || error.message 

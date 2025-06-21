@@ -1,23 +1,23 @@
 {
-  "name": "what-is-art-sync-system",
-  "version": "2.0.0",
-  "description": "Simplified sync system for What Is Art? open mic",
-  "main": "sync-server.js",
+  "name": "lower-thirds-server",
+  "version": "1.0.0",
+  "main": "lower-thirds-server.js",
   "scripts": {
-    "start": "node sync-server.js",
-    "start-lower-thirds": "node lower-thirds-server.js",
-    "dev": "nodemon sync-server.js",
-    "dev-all": "concurrently \"npm run dev\" \"npm run dev-lower-thirds\"",
-    "dev-lower-thirds": "nodemon lower-thirds-server.js"
+    "start": "node lower-thirds-server.js",
+    "dev": "nodemon lower-thirds-server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
   "dependencies": {
-    "express": "^4.18.2",
     "cors": "^2.8.5",
-    "googleapis": "^118.0.0",
-    "dotenv": "^16.0.3"
+    "express": "^5.1.0",
+    "googleapis": "^144.0.0",
+    "ws": "^8.18.2"
   },
   "devDependencies": {
-    "nodemon": "^3.0.1",
-    "concurrently": "^8.0.1"
-  }
+    "nodemon": "^3.1.10"
+  },
+  "description": "Lower thirds server with YouTube API integration for stream-aware display"
 }
