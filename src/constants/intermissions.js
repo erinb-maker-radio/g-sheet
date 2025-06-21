@@ -1,5 +1,5 @@
 // src/constants/intermissions.js
-export const INTERMISSION_SLOTS = ['8:30', '9:30', '8:30 PM', '9:30 PM'];
+export const INTERMISSION_SLOTS = ['8:30', '9:30'];
 
 export const isIntermissionSlot = (slot) => {
   return INTERMISSION_SLOTS.includes(slot);

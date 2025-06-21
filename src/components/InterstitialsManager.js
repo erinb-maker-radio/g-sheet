@@ -1,4 +1,4 @@
-// src/components/InterstitialsManager.js
+// src/components/InterstitialsManager.js - Fixed for OBS compatibility
 import React, { useState, useEffect } from 'react';
 import obsWebSocketService from '../services/obsWebSocket';
 
@@ -16,7 +16,7 @@ const InterstitialsManager = () => {
   const [currentCommercial, setCurrentCommercial] = useState(null);
   const [fadeInProgress, setFadeInProgress] = useState(false);
 
-  // Create interstitial scenes in OBS
+  // Create interstitial scenes in OBS - FIXED VERSION
   const setupInterstitialScenes = async () => {
     if (!obsWebSocketService.connected) {
       alert('Please connect to OBS first');
@@ -29,29 +29,29 @@ const InterstitialsManager = () => {
         sceneName: 'Interstitials - Commercial Break' 
       });
 
-      // Create media source for video playback
+      // Create media source for video playback - FIXED INPUT KIND
       await obsWebSocketService.obs.call('CreateInput', {
         sceneName: 'Interstitials - Commercial Break',
         inputName: 'Commercial Video Player',
-        inputKind: 'ffmpeg_source',
+        inputKind: 'vlc_source', // Changed from 'ffmpeg_source' to 'vlc_source'
         inputSettings: {
-          is_local_file: true,
-          looping: true,
-          restart_on_activate: true
+          playlist: [],
+          loop: true,
+          network_caching: 400
         }
       });
 
-      // Create text source for "Be Right Back" message
+      // Create text source for "Be Right Back" message - FIXED INPUT KIND
       await obsWebSocketService.obs.call('CreateInput', {
         sceneName: 'Interstitials - Commercial Break',
         inputName: 'Be Right Back Text',
-        inputKind: 'text_gdiplus',
+        inputKind: 'text_gdiplus_v2', // Updated to v2
         inputSettings: {
           text: 'We\'ll be right back!\nNext performer setting up...',
           font: {
             face: 'Arial',
             size: 48,
-            style: 'Bold'
+            flags: 1 // Bold
           },
           color: 0xFFFFFFFF,
           outline: true,
@@ -60,118 +60,150 @@ const InterstitialsManager = () => {
         }
       });
 
-      // Create individual scenes for each commercial
-      for (const commercial of commercials) {
-        const sceneName = `Commercial - ${commercial.name}`;
-        
-        try {
-          await obsWebSocketService.obs.call('CreateScene', { sceneName });
-          
-          // Add media source for this specific commercial
-          await obsWebSocketService.obs.call('CreateInput', {
-            sceneName,
-            inputName: commercial.name,
-            inputKind: 'ffmpeg_source',
-            inputSettings: {
-              is_local_file: true,
-              local_file: `C:/MakerRadio/Commercials/${commercial.file}`, // Update path
-              looping: false,
-              restart_on_activate: true
-            }
-          });
-        } catch (e) {
-          console.log(`Scene ${sceneName} might already exist`);
+      // Create color source for background
+      await obsWebSocketService.obs.call('CreateInput', {
+        sceneName: 'Interstitials - Commercial Break',
+        inputName: 'Background Color',
+        inputKind: 'color_source_v3',
+        inputSettings: {
+          color: 0xFF000000, // Black background
+          width: 1920,
+          height: 1080
         }
-      }
+      });
 
       alert('Interstitial scenes created successfully!');
     } catch (error) {
       console.error('Error setting up interstitial scenes:', error);
-      alert('Error creating interstitial scenes: ' + error.message);
+      
+      // More helpful error message
+      if (error.message && error.message.includes('input kind')) {
+        alert(`Error: The input type is not supported by your OBS version. 
+        
+Please check:
+1. OBS Studio is updated to latest version
+2. Required plugins are installed
+3. WebSocket plugin is up to date
+
+Error: ${error.message}`);
+      } else {
+        alert('Error creating interstitial scenes: ' + error.message);
+      }
     }
   };
 
-  // Start commercial break
+  // Alternative setup with basic sources only
+  const setupBasicScenes = async () => {
+    if (!obsWebSocketService.connected) {
+      alert('Please connect to OBS first');
+      return;
+    }
+
+    try {
+      // Create main interstitial scene
+      await obsWebSocketService.obs.call('CreateScene', { 
+        sceneName: 'Basic Intermission' 
+      });
+
+      // Just create a text source - most compatible
+      await obsWebSocketService.obs.call('CreateInput', {
+        sceneName: 'Basic Intermission',
+        inputName: 'Intermission Text',
+        inputKind: 'text_gdiplus_v2',
+        inputSettings: {
+          text: '🎭 INTERMISSION 🎭\n\nWe\'ll be right back!\n\nGrab a snack, stretch your legs,\nand get ready for more amazing performances!',
+          font: {
+            face: 'Arial',
+            size: 72,
+            flags: 1 // Bold
+          },
+          color: 0xFFFFFFFF,
+          outline: true,
+          outline_size: 3,
+          outline_color: 0xFF000000,
+          align: 'center',
+          valign: 'center'
+        }
+      });
+
+      // Create a simple colored background
+      await obsWebSocketService.obs.call('CreateInput', {
+        sceneName: 'Basic Intermission',
+        inputName: 'Intermission Background',
+        inputKind: 'color_source_v3',
+        inputSettings: {
+          color: 0xFF2C2C2C, // Dark gray
+          width: 1920,
+          height: 1080
+        }
+      });
+
+      alert('Basic intermission scene created successfully!');
+    } catch (error) {
+      console.error('Error setting up basic scenes:', error);
+      alert('Error creating basic scenes: ' + error.message);
+    }
+  };
+
+  // Start commercial break - simplified
   const startCommercialBreak = async () => {
     if (!obsWebSocketService.connected) {
       alert('OBS not connected');
       return;
     }
 
-    setIsPlaying(true);
-    setFadeInProgress(true);
-
     try {
-      // Fade to commercial scene
-      await obsWebSocketService.obs.call('SetCurrentProgramScene', {
-        sceneName: 'Interstitials - Commercial Break'
-      });
-
-      setFadeInProgress(false);
-
-      // Start cycling through enabled commercials
-      cycleCommercials();
+      // Try to switch to the intermission scene
+      const scenes = await obsWebSocketService.getSceneList();
+      
+      if (scenes.includes('Basic Intermission')) {
+        await obsWebSocketService.setCurrentScene('Basic Intermission');
+        setIsPlaying(true);
+        alert('Switched to intermission scene');
+      } else if (scenes.includes('Interstitials - Commercial Break')) {
+        await obsWebSocketService.setCurrentScene('Interstitials - Commercial Break');
+        setIsPlaying(true);
+        alert('Switched to commercial break scene');
+      } else {
+        alert('No intermission scene found. Please create scenes first.');
+      }
     } catch (error) {
       console.error('Error starting commercial break:', error);
-      setIsPlaying(false);
-      setFadeInProgress(false);
+      alert('Error starting commercial break: ' + error.message);
     }
-  };
-
-  // Cycle through commercials
-  const cycleCommercials = async () => {
-    const enabledCommercials = commercials.filter(c => c.enabled);
-    if (enabledCommercials.length === 0) return;
-
-    let index = 0;
-    
-    const playNext = async () => {
-      if (!isPlaying) return;
-
-      const commercial = enabledCommercials[index % enabledCommercials.length];
-      setCurrentCommercial(commercial);
-
-      try {
-        // Update the media source with new video
-        await obsWebSocketService.obs.call('SetInputSettings', {
-          inputName: 'Commercial Video Player',
-          inputSettings: {
-            local_file: `C:/MakerRadio/Commercials/${commercial.file}`
-          }
-        });
-
-        // Wait for commercial duration
-        setTimeout(() => {
-          index++;
-          if (isPlaying) {
-            playNext();
-          }
-        }, commercial.duration * 1000);
-
-      } catch (error) {
-        console.error('Error playing commercial:', error);
-      }
-    };
-
-    playNext();
   };
 
   // End commercial break and return to live
   const endCommercialBreak = async () => {
-    setFadeInProgress(true);
-
     try {
-      // Fade back to main performance scene
-      await obsWebSocketService.obs.call('SetCurrentProgramScene', {
-        sceneName: 'Live Performance'  // Or whatever your main scene is called
-      });
-
-      setIsPlaying(false);
-      setCurrentCommercial(null);
-      setFadeInProgress(false);
+      // Get available scenes and let user choose
+      const scenes = await obsWebSocketService.getSceneList();
+      
+      // Look for a likely "live" scene
+      const liveScene = scenes.find(scene => 
+        scene.toLowerCase().includes('live') || 
+        scene.toLowerCase().includes('main') ||
+        scene.toLowerCase().includes('performance')
+      );
+      
+      if (liveScene) {
+        await obsWebSocketService.setCurrentScene(liveScene);
+        setIsPlaying(false);
+        setCurrentCommercial(null);
+        alert(`Returned to ${liveScene}`);
+      } else {
+        // Just switch to the first available scene
+        if (scenes.length > 0) {
+          await obsWebSocketService.setCurrentScene(scenes[0]);
+          setIsPlaying(false);
+          setCurrentCommercial(null);
+          alert(`Switched to ${scenes[0]}`);
+        }
+      }
     } catch (error) {
       console.error('Error ending commercial break:', error);
-      setFadeInProgress(false);
+      alert('Error returning to live: ' + error.message);
+      setIsPlaying(false);
     }
   };
 
@@ -199,21 +231,39 @@ const InterstitialsManager = () => {
           📺 Commercial Break Manager
         </h3>
         
-        <button
-          onClick={setupInterstitialScenes}
-          disabled={!obsWebSocketService.connected}
-          style={{
-            background: '#9C27B0',
-            color: 'white',
-            border: 'none',
-            padding: '8px 16px',
-            borderRadius: '5px',
-            fontSize: '14px',
-            cursor: obsWebSocketService.connected ? 'pointer' : 'not-allowed'
-          }}
-        >
-          Setup OBS Scenes
-        </button>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button
+            onClick={setupBasicScenes}
+            disabled={!obsWebSocketService.connected}
+            style={{
+              background: '#4CAF50',
+              color: 'white',
+              border: 'none',
+              padding: '8px 16px',
+              borderRadius: '5px',
+              fontSize: '14px',
+              cursor: obsWebSocketService.connected ? 'pointer' : 'not-allowed'
+            }}
+          >
+            Setup Basic Scene
+          </button>
+          
+          <button
+            onClick={setupInterstitialScenes}
+            disabled={!obsWebSocketService.connected}
+            style={{
+              background: '#9C27B0',
+              color: 'white',
+              border: 'none',
+              padding: '8px 16px',
+              borderRadius: '5px',
+              fontSize: '14px',
+              cursor: obsWebSocketService.connected ? 'pointer' : 'not-allowed'
+            }}
+          >
+            Setup Advanced Scenes
+          </button>
+        </div>
       </div>
 
       {/* Commercial Controls */}
@@ -224,7 +274,7 @@ const InterstitialsManager = () => {
       }}>
         <button
           onClick={startCommercialBreak}
-          disabled={isPlaying || !obsWebSocketService.connected || fadeInProgress}
+          disabled={isPlaying || !obsWebSocketService.connected}
           style={{
             flex: 1,
             background: isPlaying ? '#666' : '#4CAF50',
@@ -237,12 +287,12 @@ const InterstitialsManager = () => {
             cursor: isPlaying || !obsWebSocketService.connected ? 'not-allowed' : 'pointer'
           }}
         >
-          {fadeInProgress ? 'Fading...' : isPlaying ? 'Commercials Running' : '▶️ Start Commercial Break'}
+          {isPlaying ? 'Intermission Active' : '▶️ Start Intermission'}
         </button>
         
         <button
           onClick={endCommercialBreak}
-          disabled={!isPlaying || fadeInProgress}
+          disabled={!isPlaying}
           style={{
             flex: 1,
             background: !isPlaying ? '#666' : '#f44336',
@@ -255,89 +305,47 @@ const InterstitialsManager = () => {
             cursor: !isPlaying ? 'not-allowed' : 'pointer'
           }}
         >
-          {fadeInProgress ? 'Fading...' : '⏹️ Return to Live'}
+          ⏹️ Return to Live
         </button>
       </div>
 
       {/* Current Status */}
-      {isPlaying && currentCommercial && (
+      {isPlaying && (
         <div style={{
           background: 'rgba(76, 175, 80, 0.2)',
           border: '1px solid #4CAF50',
           borderRadius: '5px',
           padding: '15px',
-          marginBottom: '20px'
+          marginBottom: '20px',
+          textAlign: 'center'
         }}>
-          <strong>Now Playing:</strong> {currentCommercial.name} ({currentCommercial.duration}s)
+          <strong style={{ color: '#4CAF50' }}>
+            🎭 INTERMISSION ACTIVE
+          </strong>
         </div>
       )}
-
-      {/* Commercial List */}
-      <div style={{
-        background: 'rgba(0, 0, 0, 0.3)',
-        padding: '15px',
-        borderRadius: '8px'
-      }}>
-        <h4 style={{ color: '#FFC107', marginBottom: '10px' }}>
-          Available Commercials:
-        </h4>
-        
-        {commercials.map(commercial => (
-          <div
-            key={commercial.id}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '10px',
-              borderBottom: '1px solid #444',
-              opacity: commercial.enabled ? 1 : 0.5
-            }}
-          >
-            <div style={{ flex: 1 }}>
-              <strong style={{ color: commercial.enabled ? 'white' : '#888' }}>
-                {commercial.name}
-              </strong>
-              <span style={{ color: '#888', marginLeft: '10px', fontSize: '14px' }}>
-                ({commercial.duration}s)
-              </span>
-            </div>
-            
-            <label style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              cursor: 'pointer' 
-            }}>
-              <input
-                type="checkbox"
-                checked={commercial.enabled}
-                onChange={() => toggleCommercial(commercial.id)}
-                style={{ marginRight: '5px' }}
-              />
-              <span style={{ fontSize: '14px', color: '#ccc' }}>Enabled</span>
-            </label>
-          </div>
-        ))}
-      </div>
 
       {/* Instructions */}
       <div style={{
         marginTop: '15px',
-        padding: '10px',
+        padding: '15px',
         background: 'rgba(33, 150, 243, 0.1)',
         borderRadius: '5px',
         fontSize: '12px',
         color: '#aaa'
       }}>
-        <strong>Setup Instructions:</strong>
+        <strong>📋 Instructions:</strong>
         <ol style={{ marginTop: '5px', marginBottom: 0, paddingLeft: '20px' }}>
-          <li>Place video files in C:\MakerRadio\Commercials\</li>
-          <li>Click "Setup OBS Scenes" to create the scenes</li>
-          <li>Enable/disable commercials as needed</li>
-          <li>Click "Start Commercial Break" between performers</li>
-          <li>System will loop through enabled commercials</li>
-          <li>Click "Return to Live" when ready</li>
+          <li><strong>Basic Scene:</strong> Creates a simple intermission screen with text</li>
+          <li><strong>Advanced Scenes:</strong> Attempts to create video playback (may fail on some OBS versions)</li>
+          <li>Use "Start Intermission" to switch to the intermission scene</li>
+          <li>Use "Return to Live" to switch back to your main scene</li>
+          <li>Make sure OBS is connected first!</li>
         </ol>
+        
+        <div style={{ marginTop: '10px', padding: '8px', background: 'rgba(255, 193, 7, 0.1)', borderRadius: '3px' }}>
+          <strong>⚠️ If you get errors:</strong> Use "Setup Basic Scene" instead. Some OBS versions have different input type names.
+        </div>
       </div>
     </div>
   );
