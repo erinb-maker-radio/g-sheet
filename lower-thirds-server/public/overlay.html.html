@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>What is Art? – Lower Thirds</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Arial', sans-serif;
+      background: transparent;
+      overflow: hidden;
+      width: 1920px;
+      height: 1080px;
+    }
+
+    /* =========================================
+       LOWER‐LEFT TEXT (No boxes/backgrounds)
+       Four lines:
+       1) Episode info ("What is Art? #…")
+       2) Artist name
+       3) Song title
+       4) Writer info
+       ========================================= */
+    .lower-left‐container {
+      position: absolute;
+      bottom: 60px;  /* Increased from 40px */
+      left: 60px;    /* Increased from 40px */
+      text-align: left;
+      line-height: 1.15;  /* Slightly tighter to fit 4 lines */
+      color: white;
+      text-shadow: 1.5px 1.5px 6px rgba(0, 0, 0, 0.7);  /* Increased from 1px 1px 4px */
+      opacity: 0;
+      transform: translateY(75px);  /* Increased from 50px */
+      transition: all 0.5s ease-out;
+    }
+
+    .lower-left‐container.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* Episode line (smaller now) */
+    .episode-info {
+      font-size: 36px;      /* Decreased from 42px */
+      font-weight: 700;     /* Increased from 600 */
+      margin-bottom: 6px;   /* Reduced from 10px */
+      letter-spacing: 1px;  /* Increased from 0.75px */
+    }
+
+    /* Artist name (smaller) */
+    .artist-name {
+      font-size: 48px;      /* Decreased from 54px */
+      font-weight: 700;
+      margin-bottom: 2px;   /* Reduced from 5px */
+      text-transform: uppercase;
+      letter-spacing: 1.5px;  /* Increased from 1px */
+    }
+
+    /* Song title (smaller) */
+    .song-title {
+      font-size: 48px;      /* Decreased from 54px */
+      font-weight: 500;
+      margin-bottom: 2px;   /* Add spacing before writer info */
+    }
+
+    /* Writer info (same size as song title) */
+    .writer-info {
+      font-size: 48px;      /* Same as song title */
+      font-weight: 500;     /* Same as song title */
+      font-style: italic;   /* Make it italic to differentiate */
+      opacity: 0.9;         /* Slightly less prominent */
+      display: block;       /* Ensure it's visible by default */
+    }
+
+    /* =========================================
+       LOWER‐RIGHT LOGO
+       ========================================= */
+    #mrLogo {
+      position: absolute;
+      bottom: 60px;   /* Increased from 40px */
+      right: 60px;    /* Increased from 40px */
+      width: 320px;   /* Increased from 270px */
+      height: auto;
+      opacity: 0;
+      animation: fadeInLogo 0.8s forwards 0.5s;
+    }
+
+    @keyframes fadeInLogo {
+      to {
+        opacity: 1;
+      }
+    }
+
+    /* =========================================
+       INTERMISSION (unchanged)
+       ========================================= */
+    .intermission-display {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      opacity: 0;
+      transition: all 0.5s ease-out;
+    }
+
+    .intermission-display.visible {
+      opacity: 1;
+    }
+
+    .intermission-text {
+      font-size: 144px;     /* Increased from 96px */
+      font-weight: 900;
+      color: #FF6B6B;
+      text-shadow:
+        0 0 30px rgba(255, 107, 107, 0.8),    /* Increased from 20px */
+        0 0 60px rgba(255, 107, 107, 0.6),    /* Increased from 40px */
+        0 0 90px rgba(255, 107, 107, 0.4);    /* Increased from 60px */
+      animation: pulse 2s infinite;
+      margin-bottom: 30px;  /* Increased from 20px */
+    }
+
+    .intermission-subtitle {
+      font-size: 54px;      /* Increased from 36px */
+      color: white;
+      font-weight: 600;
+      text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.8);  /* Increased from 2px 2px 4px */
+    }
+
+    @keyframes pulse {
+      0%   { transform: scale(1);   }
+      50%  { transform: scale(1.05);}
+      100% { transform: scale(1);   }
+    }
+
+    /* =========================================
+       ERROR & DEBUG (unchanged)
+       ========================================= */
+    .error-message {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      background: rgba(244, 67, 54, 0.9);
+      color: white;
+      padding: 10px 20px;
+      border-radius: 5px;
+      font-size: 14px;
+      display: none;
+    }
+
+    .error-message.visible {
+      display: block;
+    }
+
+    .debug-info {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(0, 0, 0, 0.8);
+      color: #0f0;
+      padding: 10px;
+      font-family: monospace;
+      font-size: 12px;
+      border-radius: 5px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <!-- ========== LOWER‐LEFT TEXT ========== -->
+  <div class="lower-left‐container" id="lowerLeft">
+    <div class="episode-info" id="episodeInfo">What Is Art? #121</div>
+    <div class="artist-name" id="artistName">Omnificent</div>
+    <div class="song-title" id="songTitle">Our Love</div>
+    <div class="writer-info" id="writerInfo">Written by John Doe</div>
+  </div>
+
+  <!-- ========== LOWER‐RIGHT LOGO (Maker Radio) ========== -->
+  <img
+    id="mrLogo"
+    src="https://images.squarespace-cdn.com/content/v1/65233de405f7fd7c8c64268a/a7a30e11-5a04-42d8-aa24-39f00352e1e0/MakerRadioLogo2.png?format=500w"
+    alt="Maker Radio Logo"
+  />
+
+  <!-- ========== INTERMISSION (unchanged) ========== -->
+  <div class="intermission-display" id="intermissionDisplay">
+    <div class="intermission-text">🎭 INTERMISSION 🎭</div>
+    <div class="intermission-subtitle">We'll be right back!</div>
+  </div>
+
+  <!-- ========== ERROR MESSAGE (unchanged) ========== -->
+  <div class="error-message" id="errorMessage"></div>
+
+  <!-- ========== DEBUG INFO (unchanged) ========== -->
+  <div class="debug-info" id="debugInfo">
+    <div>Status: <span id="debugStatus">Connecting...</span></div>
+    <div>Last Update: <span id="debugLastUpdate">Never</span></div>
+  </div>
+
+  <script>
+    // ========== EPISODE NUMBER CALCULATION ==========
+    function getEpisodeNumber() {
+      // Last Thursday (May 29, 2025) was episode 121
+      // Episodes now increment on Saturdays
+      const baseDate = new Date('2025-05-31'); // Saturday May 31, 2025 starts episode 122
+      const baseEpisode = 122;
+      const today = new Date();
+      
+      // Calculate days since base date
+      const daysDiff = Math.floor((today - baseDate) / (1000 * 60 * 60 * 24));
+      
+      // Calculate weeks passed (each Saturday is a new episode)
+      const weeksPassed = Math.floor(daysDiff / 7);
+      
+      return baseEpisode + weeksPassed;
+    }
+
+    // Update episode number immediately when page loads
+    document.getElementById('episodeInfo').textContent = `What Is Art? #${getEpisodeNumber()}`;
+
+    // Update episode number every hour in case page stays open across days/weeks
+    setInterval(() => {
+      document.getElementById('episodeInfo').textContent = `What Is Art? #${getEpisodeNumber()}`;
+    }, 3600000); // Update every hour
+
+    // ========== EVENTSOURCE & DISPLAY LOGIC ==========
+    const eventSource = new EventSource('http://localhost:3001/events');
+    const lowerLeft = document.getElementById('lowerLeft');
+    const intermissionDisplay = document.getElementById('intermissionDisplay');
+    const errorMessage = document.getElementById('errorMessage');
+    const debugStatus = document.getElementById('debugStatus');
+    const debugLastUpdate = document.getElementById('debugLastUpdate');
+    const writerInfo = document.getElementById('writerInfo');
+
+    function showError(message) {
+      errorMessage.textContent = message;
+      errorMessage.classList.add('visible');
+      setTimeout(() => {
+        errorMessage.classList.remove('visible');
+      }, 5000);
+    }
+
+    function updateDebug(status) {
+      debugStatus.textContent = status;
+      debugLastUpdate.textContent = new Date().toLocaleTimeString();
+    }
+
+    function updateDisplay(data) {
+      console.log('UpdateDisplay called with data:', data); // Debug log
+      
+      if (!data || !data.performer) {
+        // Hide lower‐left and intermission if no performer
+        lowerLeft.classList.remove('visible');
+        intermissionDisplay.classList.remove('visible');
+        updateDebug('No performer');
+        return;
+      }
+
+      const p = data.performer;
+      console.log('Performer data:', p); // Debug log
+
+      if (p.isIntermission) {
+        // Show intermission, hide lower‐left
+        lowerLeft.classList.remove('visible');
+        intermissionDisplay.classList.add('visible');
+        updateDebug('Showing intermission');
+      } else {
+        // Hide intermission
+        intermissionDisplay.classList.remove('visible');
+
+        // Update the episode info
+        document.getElementById('episodeInfo').textContent = `What Is Art? #${getEpisodeNumber()}`;
+        
+        // Update artist name
+        document.getElementById('artistName').textContent = p.artist || '';
+        
+        // Handle song title - support both old and new formats
+        let songTitle = '';
+        let writer = '';
+        
+        // Check for new format (song as object)
+        if (p.song && typeof p.song === 'object') {
+          songTitle = p.song.title || '';
+          writer = p.song.writer || '';
+        } 
+        // Check for old format (songTitle as string)
+        else if (p.songTitle) {
+          songTitle = p.songTitle;
+          // For old format, check various possible writer locations
+          writer = p.songWriter || p.writer || '';
+        }
+        
+        // Update song title
+        document.getElementById('songTitle').textContent = songTitle;
+        
+        // Update writer info
+        if (writer && writer.trim()) {
+          writerInfo.textContent = `Written by ${writer}`;
+          writerInfo.style.display = 'block';
+        } else {
+          // If no writer, hide the line
+          writerInfo.style.display = 'none';
+        }
+
+        // Fade in lower‐left
+        setTimeout(() => {
+          lowerLeft.classList.add('visible');
+        }, 100);
+
+        updateDebug(`Showing: ${p.artist} - ${songTitle}${writer ? ' (by ' + writer + ')' : ''}`);
+      }
+    }
+
+    eventSource.onopen = () => {
+      updateDebug('Connected');
+    };
+
+    eventSource.onmessage = (evt) => {
+      try {
+        const data = JSON.parse(evt.data);
+        console.log('EventSource message received:', data); // Debug log
+        updateDisplay(data);
+      } catch (e) {
+        console.error('Error parsing data:', e);
+        showError('Error parsing server data');
+      }
+    };
+
+    eventSource.onerror = (err) => {
+      console.error('EventSource error:', err);
+      updateDebug('Connection error');
+      showError('Connection lost. Retrying...');
+    };
+
+    // ========== TESTING HELPERS ==========
+    window.testLowerThird = () => {
+      updateDisplay({
+        performer: {
+          artist: 'Omnificent',
+          song: {
+            title: 'Our Love',
+            writer: 'John Doe'
+          }
+        }
+      });
+    };
+
+    window.testLowerThirdOldFormat = () => {
+      updateDisplay({
+        performer: {
+          artist: 'erin b',
+          songTitle: 'free bird',
+          songWriter: 'lynyrd'
+        }
+      });
+    };
+
+    window.testLowerThirdWithWriter = () => {
+      updateDisplay({
+        performer: {
+          artist: 'Test Artist',
+          song: {
+            title: 'Test Song',
+            writer: 'Test Writer'
+          }
+        }
+      });
+    };
+
+    window.testIntermission = () => {
+      updateDisplay({
+        performer: {
+          isIntermission: true
+        }
+      });
+    };
+
+    window.clearDisplay = () => {
+      updateDisplay({ performer: null });
+    };
+
+    // Log initial state
+    console.log('Lower thirds overlay loaded and ready');
+  </script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+{
+  "name": "lower-thirds-server",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node lower-thirds-server.js",
+    "dev": "nodemon lower-thirds-server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "googleapis": "^150.0.1",
+    "ws": "^8.18.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  },
+  "description": ""
+}

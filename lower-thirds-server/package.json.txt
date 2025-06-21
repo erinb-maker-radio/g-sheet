@@ -1,0 +1,17 @@
+{
+  "name": "lower-thirds-server",
+  "version": "1.0.0",
+  "description": "Lower thirds data server for OBS",
+  "main": "lower-thirds-server.js",
+  "scripts": {
+    "start": "node lower-thirds-server.js",
+    "dev": "nodemon lower-thirds-server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
