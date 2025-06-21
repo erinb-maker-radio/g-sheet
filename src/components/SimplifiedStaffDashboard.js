@@ -1,22 +1,48 @@
-// src/components/SimplifiedStaffDashboard.js - Complete Working Version
+/**
+ * Filename: SimplifiedStaffDashboard.js
+ * Component for managing YouTube broadcasts for What Is Art? live show
+ * 
+ * Features:
+ * - Create individual YouTube broadcasts for each song
+ * - Automatic lower thirds updates when broadcasts go live
+ * - OBS WebSocket integration
+ * - Google Sheets performer data sync
+ */
+
 import React, { useState, useEffect } from 'react';
 import obsWebSocketService from '../services/obsWebSocket';
 import youtubeService from '../services/youtubeService';
+import lowerThirdsService from '../services/lowerThirdsService';
 import { logoutStaff } from '../utils/staffAuth';
 
+// Google Sheets API endpoint for fetching performer data
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby60OaTTZ5Ad3z-VKM5RvUKeRlsIu0-HiYm8DdYUEMMT3ZM5wtjACnuV8RHVPzg2-Kq/exec';
 
 const SimplifiedStaffDashboard = ({ onLogout }) => {
-  // Core state
-  const [performers, setPerformers] = useState([]);
-  const [broadcasts, setBroadcasts] = useState([]);
+  // ===== STATE MANAGEMENT =====
+  // Core data
+  const [performers, setPerformers] = useState([]);        // List of performers from Google Sheets
+  const [broadcasts, setBroadcasts] = useState([]);        // YouTube broadcasts
+  
+  // Connection states
   const [obsConnected, setObsConnected] = useState(false);
   const [youtubeSignedIn, setYoutubeSignedIn] = useState(false);
+  
+  // Active broadcast tracking
   const [streamingBroadcastId, setStreamingBroadcastId] = useState(null);
+  const [lastLiveBroadcastId, setLastLiveBroadcastId] = useState(null);
+  
+  // UI states
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState('');
+  const [editingSongs, setEditingSongs] = useState({});   // Track which songs are in edit mode
 
-  // Get episode number
+  // ===== UTILITY FUNCTIONS =====
+  
+  /**
+   * Calculate the current episode number based on the base date
+   * Episodes increment weekly starting from #120 on May 22, 2025
+   */
   const getEpisodeNumber = () => {
     const baseDate = new Date('2025-05-22');
     const baseEpisode = 120;
@@ -25,45 +51,12 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
     return baseEpisode + weeksDiff;
   };
 
-  // Load ALL broadcasts (including old ones) - SORTED BY DATE
-  const loadAllBroadcasts = async () => {
-    if (!youtubeSignedIn) return;
-    
-    try {
-      setLoading(true);
-      const result = await youtubeService.listBroadcasts(50);
-      if (result.success) {
-        // Sort broadcasts by creation date - NEWEST FIRST
-        const sortedBroadcasts = result.broadcasts.sort((a, b) => {
-          const dateA = new Date(a.snippet.publishedAt);
-          const dateB = new Date(b.snippet.publishedAt);
-          return dateB - dateA; // Newest first (descending order)
-        });
-        
-        setBroadcasts(sortedBroadcasts);
-        setStatus(`Loaded ALL ${result.broadcasts.length} broadcasts (sorted by date, newest first)`);
-      }
-    } catch (error) {
-      console.error('Error loading all broadcasts:', error);
-      setStatus('Error loading all broadcasts');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Initialize on mount
-  useEffect(() => {
-    initializeServices();
-    fetchPerformers();
-    
-    // Set up OBS connection listener
-    const unsubscribe = obsWebSocketService.onConnectionChange(setObsConnected);
-    return unsubscribe;
-  }, []);
-
-  // Initialize services - REMOVED (now inline in useEffect)
-
-  // Fetch performers from Google Sheets
+  // ===== DATA FETCHING FUNCTIONS =====
+  
+  /**
+   * Fetch performers from Google Sheets
+   * Normalizes the data format to ensure consistency
+   */
   const fetchPerformers = async () => {
     try {
       setLoading(true);
@@ -71,7 +64,7 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
       const data = await response.json();
       
       if (data.takenSlots) {
-        // Normalize data format
+        // Normalize data format (handles both string and object formats)
         const normalizedPerformers = data.takenSlots.map((slot, index) => {
           if (typeof slot === 'string') {
             return { timeSlot: slot, artist: `Performer ${index + 1}`, songs: [] };
@@ -85,7 +78,21 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
         }).filter(slot => slot.timeSlot);
         
         setPerformers(normalizedPerformers);
-        setStatus(`Found ${normalizedPerformers.length} performers`);
+        
+        // Count total songs
+        const totalSongs = normalizedPerformers.reduce((total, performer) => {
+          // Skip intermissions
+          if (performer.timeSlot === '8:30' || performer.timeSlot === '9:30') {
+            return total;
+          }
+          // Count songs, defaulting to 1 if no songs listed
+          const songCount = performer.songs && performer.songs.length > 0 
+            ? performer.songs.filter(s => s && s.title.trim()).length 
+            : 1;
+          return total + songCount;
+        }, 0);
+        
+        setStatus(`Found ${totalSongs} songs by ${normalizedPerformers.length} performers`);
       }
     } catch (error) {
       console.error('Error fetching performers:', error);
@@ -95,7 +102,10 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
     }
   };
 
-  // Load YouTube broadcasts - FILTERED FOR RECENT ONLY
+  /**
+   * Load YouTube broadcasts - filtered for recent/current episode only
+   * This is the default view showing relevant broadcasts
+   */
   const loadBroadcasts = async () => {
     if (!youtubeSignedIn) return;
     
@@ -134,7 +144,41 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
     }
   };
 
-  // Connect to OBS
+  /**
+   * Load ALL broadcasts including old ones - sorted by date
+   * Useful for viewing historical broadcasts or cleanup
+   */
+  const loadAllBroadcasts = async () => {
+    if (!youtubeSignedIn) return;
+    
+    try {
+      setLoading(true);
+      const result = await youtubeService.listBroadcasts(50);
+      if (result.success) {
+        // Sort broadcasts by creation date - NEWEST FIRST
+        const sortedBroadcasts = result.broadcasts.sort((a, b) => {
+          const dateA = new Date(a.snippet.publishedAt);
+          const dateB = new Date(b.snippet.publishedAt);
+          return dateB - dateA; // Newest first (descending order)
+        });
+        
+        setBroadcasts(sortedBroadcasts);
+        setStatus(`Loaded ALL ${result.broadcasts.length} broadcasts (sorted by date, newest first)`);
+      }
+    } catch (error) {
+      console.error('Error loading all broadcasts:', error);
+      setStatus('Error loading all broadcasts');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ===== CONNECTION FUNCTIONS =====
+  
+  /**
+   * Connect to OBS WebSocket
+   * Default connection is localhost:4455 with no password
+   */
   const connectOBS = async () => {
     setLoading(true);
     setStatus('Connecting to OBS...');
@@ -150,7 +194,10 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
     setLoading(false);
   };
 
-  // Sign in to YouTube
+  /**
+   * Sign in to YouTube using OAuth
+   * Opens Google sign-in popup
+   */
   const signInYouTube = async () => {
     setLoading(true);
     setStatus('Signing in to YouTube...');
@@ -170,7 +217,14 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
     setLoading(false);
   };
 
-  // Create broadcast for a specific song
+  // ===== BROADCAST MANAGEMENT FUNCTIONS =====
+  
+  /**
+   * Create a YouTube broadcast for a specific song
+   * @param {Object} performer - Performer data
+   * @param {Object} song - Song data
+   * @param {number} songIndex - Index of the song in performer's list
+   */
   const createSongBroadcast = async (performer, song, songIndex) => {
     if (!youtubeSignedIn) {
       alert('Please sign in to YouTube first');
@@ -182,14 +236,18 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
     
     try {
       const episodeNumber = getEpisodeNumber();
+      // Title format: What Is Art? #122 | Artist Name | Song Title
       const title = `What Is Art? #${episodeNumber} | ${performer.artist} | ${song.title}`;
+      
+      // Build description with all available info
       const description = `Episode #${episodeNumber}\nArtist: ${performer.artist}\nSong: ${song.title}\nTime Slot: ${performer.timeSlot}${song.writer ? `\nWritten by: ${song.writer}` : ''}`;
       
+      // Create broadcast as unlisted by default
       const result = await youtubeService.createBroadcast(title, description, null, 'unlisted');
       
       if (result.success) {
         setStatus(`✅ Created broadcast: ${song.title}`);
-        await loadBroadcasts();
+        await loadBroadcasts(); // Refresh the list
       } else {
         setStatus(`❌ Failed to create broadcast: ${result.error}`);
       }
@@ -201,19 +259,90 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
     }
   };
 
-  // Get all individual songs from all performers - USED in component
+  /**
+   * Clean up old broadcasts that are stuck in "ready" status
+   * Broadcasts older than 12 hours in ready status are considered stale
+   */
+  const cleanupOldReadyBroadcasts = async () => {
+    if (!youtubeSignedIn) return;
+    
+    const twelveHoursAgo = new Date();
+    twelveHoursAgo.setHours(twelveHoursAgo.getHours() - 12);
+    
+    // Find old ready broadcasts
+    const oldReadyBroadcasts = broadcasts.filter(broadcast => {
+      const createdDate = new Date(broadcast.snippet.publishedAt);
+      return broadcast.status.lifeCycleStatus === 'ready' && createdDate < twelveHoursAgo;
+    });
+    
+    if (oldReadyBroadcasts.length === 0) {
+      setStatus('No old ready broadcasts to clean up');
+      return;
+    }
+    
+    // Confirm with user
+    if (!window.confirm(`Found ${oldReadyBroadcasts.length} broadcasts older than 12 hours in "ready" status. Delete them?`)) {
+      return;
+    }
+    
+    setLoading(true);
+    setStatus(`Cleaning up ${oldReadyBroadcasts.length} old broadcasts...`);
+    
+    let cleaned = 0;
+    
+    // Process each old broadcast
+    for (const broadcast of oldReadyBroadcasts) {
+      try {
+        // YouTube requires broadcasts to be completed before deletion
+        // Step 1: Start the broadcast briefly
+        await youtubeService.transitionBroadcast(broadcast.id, 'live');
+        await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+        
+        // Step 2: Stop the broadcast
+        await youtubeService.transitionBroadcast(broadcast.id, 'complete');
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+        
+        // Step 3: Delete the broadcast
+        const deleteResult = await youtubeService.deleteBroadcast(broadcast.id);
+        
+        if (deleteResult.success) {
+          cleaned++;
+        }
+        
+        // Rate limiting to avoid API quota issues
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+      } catch (error) {
+        console.error(`Error cleaning up broadcast ${broadcast.snippet.title}:`, error);
+      }
+    }
+    
+    setStatus(`✅ Cleaned up ${cleaned} old broadcasts`);
+    await loadBroadcasts(); // Refresh the list
+    setLoading(false);
+  };
+
+  // ===== DATA PROCESSING FUNCTIONS =====
+  
+  /**
+   * Get all individual songs from all performers
+   * Transforms performer data into a flat list of songs
+   */
   const getAllSongs = () => {
     const allSongs = [];
     
     performers.forEach(performer => {
+      // Skip intermission slots
       if (performer.timeSlot === '8:30' || performer.timeSlot === '9:30') {
-        return; // Skip intermissions
+        return;
       }
 
+      // Ensure each performer has at least one song entry
       const songs = performer.songs && performer.songs.length > 0 
         ? performer.songs.filter(s => s && s.title.trim()) 
         : [{ title: 'Performance', writer: '' }];
       
+      // Create an entry for each song
       songs.forEach((song, songIndex) => {
         allSongs.push({
           performer,
@@ -236,18 +365,25 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
     });
   };
 
-  // Check if a song already has a broadcast
+  /**
+   * Check if a song already has a broadcast created
+   * @param {Object} songData - Song data to check
+   */
   const songHasBroadcast = (songData) => {
+    if (!songData || !songData.artist || !songData.songTitle) return false;
+    
     return broadcasts.some(broadcast => {
-      const title = broadcast.snippet.title;
+      const title = broadcast.snippet?.title || '';
       return title.includes(songData.artist) && title.includes(songData.songTitle);
     });
   };
 
-  // State for editing song data
-  const [editingSongs, setEditingSongs] = useState({});
-
-  // Toggle editing mode for a song
+  // ===== EDIT MODE FUNCTIONS =====
+  
+  /**
+   * Toggle edit mode for a specific song
+   * @param {string} songId - Unique song identifier
+   */
   const toggleEditMode = (songId) => {
     setEditingSongs(prev => ({
       ...prev,
@@ -255,7 +391,12 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
     }));
   };
 
-  // Update song data in editing mode
+  /**
+   * Update song data when in edit mode
+   * @param {string} songId - Unique song identifier
+   * @param {string} field - Field to update (title, writer)
+   * @param {string} value - New value
+   */
   const updateSongData = (songId, field, value) => {
     setPerformers(prevPerformers => {
       return prevPerformers.map(performer => {
@@ -270,7 +411,12 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
     });
   };
 
-  // Update performer data in editing mode
+  /**
+   * Update performer data when in edit mode
+   * @param {string} songId - Song identifier (used to find performer)
+   * @param {string} field - Field to update (artist, timeSlot)
+   * @param {string} value - New value
+   */
   const updatePerformerData = (songId, field, value) => {
     setPerformers(prevPerformers => {
       return prevPerformers.map(performer => {
@@ -282,138 +428,207 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
     });
   };
 
-  // Start a broadcast
-  const startBroadcast = async (broadcastId) => {
+  // ===== LIVE BROADCAST MONITORING =====
+  
+  /**
+   * Check for live broadcasts and update lower thirds automatically
+   */
+  const checkForLiveBroadcast = async () => {
     try {
-      setLoading(true);
-      const result = await youtubeService.transitionBroadcast(broadcastId, 'live');
-      if (result.success) {
-        setStreamingBroadcastId(broadcastId);
-        setStatus('✅ Broadcast started');
-        await loadBroadcasts(); // Refresh to update status
-      }
-    } catch (error) {
-      setStatus('❌ Error starting broadcast');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Stop current broadcast
-  const stopBroadcast = async (broadcastId) => {
-    const targetId = broadcastId || streamingBroadcastId;
-    if (!targetId) return;
-    
-    try {
-      setLoading(true);
-      const result = await youtubeService.transitionBroadcast(targetId, 'complete');
-      if (result.success) {
-        setStreamingBroadcastId(null);
-        setStatus('✅ Broadcast stopped');
-        await loadBroadcasts(); // Refresh to update status
-      }
-    } catch (error) {
-      setStatus('❌ Error stopping broadcast');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Group broadcasts by performer
-  const getBroadcastsByPerformer = () => {
-    const grouped = {};
-    
-    broadcasts.forEach(broadcast => {
-      const match = broadcast.snippet.title.match(/#\d+ \| (.+) \| (.+)$/);
-      if (match) {
-        const artist = match[1];
-        if (!grouped[artist]) {
-          grouped[artist] = [];
+      // Get current broadcasts
+      const result = await youtubeService.listBroadcasts(10);
+      if (!result.success) return;
+      
+      // Find any live broadcast
+      const liveBroadcast = result.broadcasts.find(
+        broadcast => broadcast.status.lifeCycleStatus === 'live'
+      );
+      
+      if (liveBroadcast && liveBroadcast.id !== lastLiveBroadcastId) {
+        // New live broadcast detected!
+        console.log('New live broadcast detected:', liveBroadcast.snippet.title);
+        setLastLiveBroadcastId(liveBroadcast.id);
+        setStreamingBroadcastId(liveBroadcast.id);
+        
+        // Parse the broadcast title
+        // Format: "What Is Art? #124 | Artist Name | Song Title"
+        const titleMatch = liveBroadcast.snippet.title.match(/What Is Art\? #\d+ \| (.+) \| (.+)$/);
+        
+        if (titleMatch) {
+          const [, artist, songTitle] = titleMatch;
+          
+          // Parse the description for additional info
+          const description = liveBroadcast.snippet.description || '';
+          const writerMatch = description.match(/Written by: (.+)/m);
+          const timeSlotMatch = description.match(/Time Slot: (.+)/m);
+          
+          const performerData = {
+            artist: artist.trim(),
+            songTitle: songTitle.trim(),
+            songWriter: writerMatch ? writerMatch[1].trim() : '',
+            timeSlot: timeSlotMatch ? timeSlotMatch[1].trim() : '',
+            isIntermission: false
+          };
+          
+          // Update lower thirds
+          try {
+            await lowerThirdsService.updatePerformer(performerData);
+            console.log('Lower thirds auto-updated for live broadcast:', performerData);
+            setStatus(`🔴 Live: ${performerData.artist} - ${performerData.songTitle}`);
+          } catch (error) {
+            console.error('Error updating lower thirds:', error);
+          }
         }
-        grouped[artist].push({
-          ...broadcast,
-          songTitle: match[2]
-        });
+      } else if (!liveBroadcast && lastLiveBroadcastId) {
+        // Stream ended
+        console.log('Live broadcast ended');
+        setLastLiveBroadcastId(null);
+        setStreamingBroadcastId(null);
+        
+        // Clear lower thirds
+        try {
+          await lowerThirdsService.clearPerformer();
+          setStatus('Stream ended - Lower thirds cleared');
+        } catch (error) {
+          console.error('Error clearing lower thirds:', error);
+        }
       }
+    } catch (error) {
+      console.error('Error checking for live broadcast:', error);
+    }
+  };
+
+  // ===== LOWER THIRDS INTEGRATION =====
+  
+  /**
+   * Handle OBS scene changes - automatically update lower thirds
+   * @param {string} sceneName - Name of the scene that was switched to
+   */
+  const handleSceneChange = async (sceneName) => {
+    console.log('Scene changed to:', sceneName);
+    
+    // Handle specific scene types
+    if (sceneName.toLowerCase().includes('intermission')) {
+      // Handle intermission scenes
+      try {
+        await lowerThirdsService.showIntermission('');
+        console.log('Lower thirds set to intermission');
+        setStatus('Lower thirds: Intermission');
+      } catch (error) {
+        console.error('Error setting intermission:', error);
+      }
+    } else if (sceneName.toLowerCase().includes('commercial') || sceneName.toLowerCase().includes('interstitial')) {
+      // Clear lower thirds during commercials
+      try {
+        await lowerThirdsService.clearPerformer();
+        console.log('Lower thirds cleared for commercial');
+        setStatus('Lower thirds cleared');
+      } catch (error) {
+        console.error('Error clearing lower thirds:', error);
+      }
+    }
+    // For "Stage Cameras" or other performance scenes, the lower thirds 
+    // will be updated when clicking on a performer/song in the dashboard
+  };
+
+  /**
+   * Update lower thirds when creating a broadcast (preview mode)
+   * This helps operators see the lower thirds before going live
+   */
+  const updateLowerThirdsForSong = async (performer, song) => {
+    try {
+      await lowerThirdsService.updatePerformer({
+        artist: performer.artist,
+        songTitle: song.title,
+        songWriter: song.writer || '',
+        timeSlot: performer.timeSlot,
+        isIntermission: false
+      });
+      
+      console.log('Lower thirds preview updated');
+    } catch (error) {
+      console.error('Error updating lower thirds preview:', error);
+    }
+  };
+
+  // ===== INITIALIZATION =====
+  
+  // Initialize services and fetch data on component mount
+  useEffect(() => {
+    const initializeServices = async () => {
+      try {
+        // Initialize YouTube API
+        await youtubeService.init();
+        const signedIn = youtubeService.isSignedIn;
+        setYoutubeSignedIn(signedIn);
+        
+        // If already signed in, load broadcasts and start monitoring
+        if (signedIn) {
+          await loadBroadcasts();
+        }
+      } catch (error) {
+        console.error('Failed to initialize YouTube:', error);
+      }
+    };
+
+    initializeServices();
+    fetchPerformers();
+    
+    // Set up OBS connection listener
+    const unsubscribe = obsWebSocketService.onConnectionChange(setObsConnected);
+    
+    // Set up OBS scene change listener for auto lower thirds
+    const unsubscribeScene = obsWebSocketService.onSceneChange(async (sceneName) => {
+      await handleSceneChange(sceneName);
     });
     
-    return grouped;
-  };
+    // Cleanup on unmount
+    return () => {
+      unsubscribe();
+      unsubscribeScene();
+    };
+  }, []);
 
-  // Auto-cleanup old "ready" broadcasts (older than 12 hours)
-  const cleanupOldReadyBroadcasts = async () => {
+  // Monitor for live broadcasts when YouTube is connected
+  useEffect(() => {
     if (!youtubeSignedIn) return;
     
-    const twelveHoursAgo = new Date();
-    twelveHoursAgo.setHours(twelveHoursAgo.getHours() - 12);
+    // Check for live broadcasts every 5 seconds
+    const interval = setInterval(async () => {
+      await checkForLiveBroadcast();
+    }, 5000);
     
-    const oldReadyBroadcasts = broadcasts.filter(broadcast => {
-      const createdDate = new Date(broadcast.snippet.publishedAt);
-      return broadcast.status.lifeCycleStatus === 'ready' && createdDate < twelveHoursAgo;
-    });
+    // Initial check
+    checkForLiveBroadcast();
     
-    if (oldReadyBroadcasts.length === 0) {
-      setStatus('No old ready broadcasts to clean up');
-      return;
-    }
-    
-    // eslint-disable-next-line no-restricted-globals
-    if (!confirm(`Found ${oldReadyBroadcasts.length} broadcasts older than 12 hours in "ready" status. Delete them?`)) {
-      return;
-    }
-    
-    setLoading(true);
-    setStatus(`Cleaning up ${oldReadyBroadcasts.length} old broadcasts...`);
-    
-    let cleaned = 0;
-    
-    for (const broadcast of oldReadyBroadcasts) {
-      try {
-        // Step 1: Start the broadcast briefly
-        await youtubeService.transitionBroadcast(broadcast.id, 'live');
-        await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
-        
-        // Step 2: Stop the broadcast
-        await youtubeService.transitionBroadcast(broadcast.id, 'complete');
-        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
-        
-        // Step 3: Delete the broadcast
-        const deleteResult = await youtubeService.deleteBroadcast(broadcast.id);
-        
-        if (deleteResult.success) {
-          cleaned++;
-        }
-        
-        // Rate limiting
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-      } catch (error) {
-        console.error(`Error cleaning up broadcast ${broadcast.snippet.title}:`, error);
-      }
-    }
-    
-    setStatus(`✅ Cleaned up ${cleaned} old broadcasts`);
-    await loadBroadcasts(); // Refresh the list
-    setLoading(false);
-  };
+    return () => clearInterval(interval);
+  }, [youtubeSignedIn, lastLiveBroadcastId, broadcasts]);
 
-  // Split broadcasts by status
+  // ===== COMPUTED VALUES =====
+  
+  // Get all songs
+  const allSongs = performers.length > 0 ? getAllSongs() : [];
+
+  // Get broadcasts by status
   const getReadyBroadcasts = () => {
+    if (!broadcasts || broadcasts.length === 0) return [];
     return broadcasts.filter(broadcast => 
-      broadcast.status.lifeCycleStatus === 'ready' || 
-      broadcast.status.lifeCycleStatus === 'created'
+      broadcast?.status?.lifeCycleStatus === 'ready' || 
+      broadcast?.status?.lifeCycleStatus === 'created'
     );
   };
 
   const getCompletedBroadcasts = () => {
+    if (!broadcasts || broadcasts.length === 0) return [];
     return broadcasts.filter(broadcast => 
-      broadcast.status.lifeCycleStatus === 'complete'
+      broadcast?.status?.lifeCycleStatus === 'complete'
     );
   };
 
   const getLiveBroadcasts = () => {
+    if (!broadcasts || broadcasts.length === 0) return [];
     return broadcasts.filter(broadcast => 
-      broadcast.status.lifeCycleStatus === 'live'
+      broadcast?.status?.lifeCycleStatus === 'live'
     );
   };
 
@@ -421,7 +636,8 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
   const completedBroadcasts = getCompletedBroadcasts();
   const liveBroadcasts = getLiveBroadcasts();
 
-  // Styles
+  // ===== STYLES =====
+  
   const cardStyle = {
     background: 'rgba(40, 40, 40, 0.9)',
     border: '1px solid #333',
@@ -454,6 +670,28 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
     color: 'white'
   };
 
+  const editInputStyle = {
+    background: 'rgba(255, 255, 255, 0.1)',
+    border: '1px solid #555',
+    borderRadius: '4px',
+    padding: '6px 10px',
+    color: 'white',
+    fontSize: '14px'
+  };
+
+  const editButtonStyle = {
+    background: 'transparent',
+    border: '1px solid',
+    padding: '6px 12px',
+    borderRadius: '6px',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease'
+  };
+
+  // ===== RENDER =====
+  
   return (
     <div style={{
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
@@ -462,7 +700,7 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
       minHeight: '100vh',
       padding: '20px'
     }}>
-      {/* Header */}
+      {/* Header Section */}
       <div style={cardStyle}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h1 style={{ margin: 0, color: '#e91e63' }}>
@@ -483,14 +721,14 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
         </div>
       </div>
 
-      {/* Status */}
+      {/* Status Display */}
       {status && (
         <div style={statusStyle}>
           {status}
         </div>
       )}
 
-      {/* Quick Setup */}
+      {/* Quick Setup Section */}
       <div style={cardStyle}>
         <h2 style={{ color: '#2196F3', marginBottom: '20px' }}>🚀 Quick Setup</h2>
         
@@ -518,26 +756,60 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
           >
             {youtubeSignedIn ? '✅ YouTube Ready' : '📺 Sign in YouTube'}
           </button>
+        </div>
+        
+        {/* Auto Lower Thirds Status */}
+        {youtubeSignedIn && (
+          <div style={{
+            marginTop: '15px',
+            padding: '10px',
+            background: 'rgba(156, 39, 176, 0.1)',
+            border: '1px solid #9C27B0',
+            borderRadius: '8px',
+            fontSize: '14px',
+            color: '#E1BEE7'
+          }}>
+            🎯 <strong>Auto Lower Thirds:</strong> Active - Monitoring for live broadcasts
+          </div>
+        )}
+      </div>
+
+      {/* Individual Songs Section - Create Broadcasts */}
+      <div style={cardStyle}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <h2 style={{ color: '#FFC107', margin: 0 }}>
+            🎵 Ready to Create Broadcasts ({allSongs.length})
+          </h2>
           
           <button
             onClick={fetchPerformers}
             disabled={loading}
             style={{
-              ...buttonStyle,
-              background: '#FF9800',
-              opacity: loading ? 0.6 : 1
+              background: '#FFC107',
+              color: '#000',
+              border: 'none',
+              padding: '8px 16px',
+              borderRadius: '6px',
+              fontSize: '14px',
+              fontWeight: '600',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              opacity: loading ? 0.6 : 1,
+              transition: 'all 0.2s ease'
+            }}
+            onMouseEnter={(e) => {
+              if (!loading) {
+                e.target.style.transform = 'translateY(-2px)';
+                e.target.style.boxShadow = '0 4px 8px rgba(255, 193, 7, 0.4)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.transform = 'translateY(0)';
+              e.target.style.boxShadow = 'none';
             }}
           >
-            📋 Reload Songs ({allSongs.length})
+            🔄 Refresh
           </button>
         </div>
-      </div>
-
-      {/* Individual Songs - RENAMED */}
-      <div style={cardStyle}>
-        <h2 style={{ color: '#FFC107', marginBottom: '20px' }}>
-          🎵 Ready to Create Broadcasts ({allSongs.length})
-        </h2>
         
         {allSongs.length === 0 ? (
           <p style={{ color: '#888', textAlign: 'center', padding: '40px' }}>
@@ -564,16 +836,22 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
                 >
                   <div style={{ flex: 1 }}>
                     {isEditing ? (
-                      // EDIT MODE
+                      // Edit Mode UI
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                          <input
-                            type="text"
-                            value={songData.timeSlot}
-                            onChange={(e) => updatePerformerData(songData.id, 'timeSlot', e.target.value)}
-                            style={{ ...editInputStyle, width: '80px' }}
-                            placeholder="Time"
-                          />
+                          <span style={{ 
+                            padding: '6px 10px',
+                            background: 'rgba(233, 30, 99, 0.2)',
+                            border: '1px solid #e91e63',
+                            borderRadius: '4px',
+                            fontSize: '14px',
+                            fontWeight: '600',
+                            color: '#e91e63',
+                            minWidth: '80px',
+                            textAlign: 'center'
+                          }}>
+                            {songData.timeSlot}
+                          </span>
                           <span style={{ color: '#888' }}>-</span>
                           <input
                             type="text"
@@ -601,7 +879,7 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
                         />
                       </div>
                     ) : (
-                      // VIEW MODE
+                      // View Mode UI
                       <div>
                         <div style={{ fontSize: '16px', fontWeight: '600', color: '#e91e63', marginBottom: '4px' }}>
                           {songData.timeSlot} - {songData.artist}
@@ -650,6 +928,8 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
                             toggleEditMode(songData.id);
                           }
                           createSongBroadcast(songData.performer, songData.song, songData.songIndex);
+                          // Also update lower thirds preview
+                          updateLowerThirdsForSong(songData.performer, songData.song);
                         }}
                         disabled={loading}
                         style={{
@@ -671,7 +951,7 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
         )}
       </div>
 
-      {/* Broadcast Loading Controls - MOVED HERE */}
+      {/* Broadcast Loading Controls */}
       <div style={cardStyle}>
         <h2 style={{ color: '#9C27B0', marginBottom: '20px' }}>
           🔄 Broadcast Controls
@@ -727,7 +1007,7 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
         </p>
       </div>
 
-      {/* Live Broadcasts (if any) */}
+      {/* Live Broadcasts Section (if any) */}
       {liveBroadcasts.length > 0 && (
         <div style={cardStyle}>
           <h2 style={{ color: '#4CAF50', marginBottom: '20px' }}>
@@ -758,18 +1038,6 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
               </div>
               
               <div style={{ display: 'flex', gap: '8px' }}>
-                <button
-                  onClick={() => stopBroadcast(broadcast.id)}
-                  style={{
-                    ...buttonStyle,
-                    background: '#f44336',
-                    padding: '8px 16px',
-                    fontSize: '14px'
-                  }}
-                >
-                  ⏹️ Stop
-                </button>
-                
                 <a
                   href={`https://www.youtube.com/watch?v=${broadcast.id}`}
                   target="_blank"
@@ -791,7 +1059,7 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
         </div>
       )}
 
-      {/* Ready Broadcasts */}
+      {/* Ready Broadcasts Section */}
       <div style={cardStyle}>
         <h2 style={{ color: '#2196F3', marginBottom: '20px' }}>
           ⚡ Ready to Stream ({readyBroadcasts.length})
@@ -834,21 +1102,8 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
                   
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button
-                      onClick={() => startBroadcast(broadcast.id)}
-                      style={{
-                        ...buttonStyle,
-                        background: '#4CAF50',
-                        padding: '8px 16px',
-                        fontSize: '14px'
-                      }}
-                    >
-                      ▶️ Start
-                    </button>
-                    
-                    <button
                       onClick={async () => {
-                        // eslint-disable-next-line no-restricted-globals
-                        if (confirm(`Delete broadcast: ${broadcast.snippet.title}?`)) {
+                        if (window.confirm(`Delete broadcast: ${broadcast.snippet.title}?`)) {
                           setLoading(true);
                           const result = await youtubeService.deleteBroadcast(broadcast.id);
                           if (result.success) {
@@ -893,7 +1148,7 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
         )}
       </div>
 
-      {/* Completed Broadcasts */}
+      {/* Completed Broadcasts Section */}
       <div style={cardStyle}>
         <h2 style={{ color: '#9C27B0', marginBottom: '20px' }}>
           ✅ Completed Broadcasts ({completedBroadcasts.length})
@@ -953,8 +1208,7 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
                   
                   <button
                     onClick={async () => {
-                      // eslint-disable-next-line no-restricted-globals
-                      if (confirm('Delete this completed broadcast?')) {
+                      if (window.confirm('Delete this completed broadcast?')) {
                         setLoading(true);
                         const result = await youtubeService.deleteBroadcast(broadcast.id);
                         if (result.success) {
@@ -982,7 +1236,7 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
         )}
       </div>
 
-      {/* Loading overlay */}
+      {/* Loading Overlay */}
       {loading && (
         <div style={{
           position: 'fixed',
