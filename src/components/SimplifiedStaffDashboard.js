@@ -531,25 +531,8 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
     // will be updated when clicking on a performer/song in the dashboard
   };
 
-  /**
-   * Update lower thirds when creating a broadcast (preview mode)
-   * This helps operators see the lower thirds before going live
-   */
-  const updateLowerThirdsForSong = async (performer, song) => {
-    try {
-      await lowerThirdsService.updatePerformer({
-        artist: performer.artist,
-        songTitle: song.title,
-        songWriter: song.writer || '',
-        timeSlot: performer.timeSlot,
-        isIntermission: false
-      });
-      
-      console.log('Lower thirds preview updated');
-    } catch (error) {
-      console.error('Error updating lower thirds preview:', error);
-    }
-  };
+
+ 
 
   // ===== INITIALIZATION =====
   
@@ -928,8 +911,7 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
                             toggleEditMode(songData.id);
                           }
                           createSongBroadcast(songData.performer, songData.song, songData.songIndex);
-                          // Also update lower thirds preview
-                          updateLowerThirdsForSong(songData.performer, songData.song);
+                         
                         }}
                         disabled={loading}
                         style={{
@@ -1096,7 +1078,7 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
                       Status: {broadcast.status.lifeCycleStatus.toUpperCase()} | 
                       Privacy: {broadcast.status.privacyStatus} |
                       Created: {new Date(broadcast.snippet.publishedAt).toLocaleDateString()}
-                      {isOld && <span style={{ color: '#FFC107', marginLeft: '10px' }}>⚠️ OLD (>12h)</span>}
+                      {isOld && <span style={{ color: '#FFC107', marginLeft: '10px' }}>⚠️ OLD (&gt;12h)</span>}
                     </div>
                   </div>
                   
@@ -1261,7 +1243,12 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
           </div>
         </div>
       )}
-    </div>
+    
+
+
+
+
+</div>
   );
 };
 
