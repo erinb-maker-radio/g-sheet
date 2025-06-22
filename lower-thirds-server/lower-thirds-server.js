@@ -1,310 +1,241 @@
-// lower-thirds-server.js
+// server.js - Lower Thirds Server for What Is Art?
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
+
 const app = express();
 const PORT = 3001;
 
 // Middleware
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control'],
-  credentials: false
-}));
+app.use(cors());
 app.use(express.json());
+app.use(express.static(__dirname));
 
-// Store current state
+// Store current performer data
 let currentPerformer = null;
 let performerHistory = [];
-let clients = [];
+let sseClients = [];
 
-// Serve the fixed HTML file
-app.get('/stream-lower-thirds.html', (req, res) => {
-  res.sendFile(path.join(__dirname, 'stream-lower-thirds.html'));
-});
-
-// SSE endpoint for real-time updates
+// Server-Sent Events endpoint
 app.get('/events', (req, res) => {
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  
-  // Send initial data
-  const initialData = {
-    type: 'initial',
-    performer: currentPerformer,
-    timestamp: new Date().toISOString()
-  };
-  
-  res.write(`data: ${JSON.stringify(initialData)}\n\n`);
-  
-  // Add client to list
-  clients.push(res);
-  console.log(`✅ Client connected. Total clients: ${clients.length}`);
-  
-  // Heartbeat to keep connection alive
-  const heartbeat = setInterval(() => {
-    try {
-      res.write(`data: ${JSON.stringify({ type: 'heartbeat' })}\n\n`);
-    } catch (error) {
-      clearInterval(heartbeat);
-      clients = clients.filter(client => client !== res);
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    
+    // Send initial connection
+    res.write(`data: ${JSON.stringify({ type: 'connected' })}\n\n`);
+    
+    // Add this client
+    const clientId = Date.now();
+    const client = { id: clientId, res };
+    sseClients.push(client);
+    
+    // Send current performer if exists
+    if (currentPerformer) {
+        res.write(`data: ${JSON.stringify({ type: 'update', performer: currentPerformer })}\n\n`);
     }
-  }, 30000);
-  
-  // Remove client on disconnect
-  req.on('close', () => {
-    clearInterval(heartbeat);
-    clients = clients.filter(client => client !== res);
-    console.log(`❌ Client disconnected. Total clients: ${clients.length}`);
-  });
-});
-
-// Update performer endpoint - handles multiple data formats
-app.post('/update-performer', (req, res) => {
-  console.log('Received update request:', req.body);
-  
-  // Normalize the data to a consistent format
-  const performerData = {
-    artist: req.body.artist || 'Unknown Artist',
-    timeSlot: req.body.timeSlot || '',
-    isIntermission: req.body.isIntermission || false
-  };
-  
-  // Handle song data - support multiple input formats
-  if (req.body.songs && Array.isArray(req.body.songs) && req.body.songs.length > 0) {
-    // Array of songs format (from your system)
-    const firstSong = req.body.songs[0];
-    performerData.song = {
-      title: firstSong.title || '',
-      writer: firstSong.writer || ''
-    };
-  } else if (req.body.song && typeof req.body.song === 'object') {
-    // Object format
-    performerData.song = {
-      title: req.body.song.title || '',
-      writer: req.body.song.writer || ''
-    };
-  } else {
-    // Flat format (backward compatibility)
-    performerData.song = {
-      title: req.body.songTitle || req.body.title || '',
-      writer: req.body.songWriter || req.body.writer || ''
-    };
-  }
-  
-  currentPerformer = performerData;
-  
-  // Add to history
-  performerHistory.push({
-    ...currentPerformer,
-    timestamp: new Date().toISOString()
-  });
-  
-  // Keep only last 50 entries
-  if (performerHistory.length > 50) {
-    performerHistory = performerHistory.slice(-50);
-  }
-  
-  console.log('Updated performer:', currentPerformer);
-  
-  // Send update to all connected clients
-  const updateMessage = JSON.stringify({
-    type: 'update',
-    performer: currentPerformer
-  });
-  
-  clients.forEach(client => {
-    try {
-      client.write(`data: ${updateMessage}\n\n`);
-    } catch (error) {
-      console.error('Error sending to client:', error);
-    }
-  });
-  
-  res.json({ success: true, performer: currentPerformer });
-});
-
-// Clear performer endpoint
-app.post('/clear-performer', (req, res) => {
-  currentPerformer = null;
-  
-  console.log('Cleared performer');
-  
-  // Send clear message to all clients
-  const clearMessage = JSON.stringify({
-    type: 'clear',
-    performer: null
-  });
-  
-  clients.forEach(client => {
-    try {
-      client.write(`data: ${clearMessage}\n\n`);
-    } catch (error) {
-      console.error('Error sending to client:', error);
-    }
-  });
-  
-  res.json({ success: true });
+    
+    // Send heartbeat every 30 seconds
+    const heartbeat = setInterval(() => {
+        res.write(`data: ${JSON.stringify({ type: 'heartbeat' })}\n\n`);
+    }, 30000);
+    
+    // Remove client on disconnect
+    req.on('close', () => {
+        clearInterval(heartbeat);
+        sseClients = sseClients.filter(c => c.id !== clientId);
+        console.log(`Client disconnected. Active clients: ${sseClients.length}`);
+    });
+    
+    console.log(`New SSE client connected. Active clients: ${sseClients.length}`);
 });
 
 // Get current performer
 app.get('/current-performer', (req, res) => {
-  res.json(currentPerformer);
+    if (currentPerformer) {
+        res.json(currentPerformer);
+    } else {
+        res.status(404).json({ message: 'No current performer' });
+    }
+});
+
+// Update performer
+app.post('/update-performer', (req, res) => {
+    const performerData = req.body;
+    currentPerformer = {
+        artist: performerData.artist || '',
+        songTitle: performerData.songTitle || performerData.song?.title || '',
+        songWriter: performerData.songWriter || performerData.song?.writer || '',
+        timeSlot: performerData.timeSlot || '',
+        isIntermission: performerData.isIntermission || false,
+        keepVisible: performerData.keepVisible || false,
+        timestamp: new Date().toISOString()
+    };
+    
+    // Add to history
+    performerHistory.push(currentPerformer);
+    
+    // Notify all SSE clients
+    const message = JSON.stringify({ type: 'update', performer: currentPerformer });
+    sseClients.forEach(client => {
+        client.res.write(`data: ${message}\n\n`);
+    });
+    
+    console.log('Updated performer:', currentPerformer);
+    res.json({ success: true, performer: currentPerformer });
+});
+
+// Clear performer
+app.post('/clear-performer', (req, res) => {
+    currentPerformer = null;
+    
+    // Notify all SSE clients
+    const message = JSON.stringify({ type: 'clear' });
+    sseClients.forEach(client => {
+        client.res.write(`data: ${message}\n\n`);
+    });
+    
+    console.log('Cleared performer display');
+    res.json({ success: true });
+});
+
+// Show intermission
+app.post('/intermission', (req, res) => {
+    currentPerformer = {
+        artist: '🎭 INTERMISSION',
+        songTitle: "We'll be right back!",
+        songWriter: '',
+        timeSlot: req.body.timeSlot || '',
+        isIntermission: true,
+        keepVisible: true,
+        timestamp: new Date().toISOString()
+    };
+    
+    // Notify all SSE clients
+    const message = JSON.stringify({ type: 'update', performer: currentPerformer });
+    sseClients.forEach(client => {
+        client.res.write(`data: ${message}\n\n`);
+    });
+    
+    console.log('Started intermission');
+    res.json({ success: true });
 });
 
 // Get performer history
 app.get('/performer-history', (req, res) => {
-  res.json({ history: performerHistory });
+    res.json({ 
+        history: performerHistory.slice(-20), // Last 20 performers
+        total: performerHistory.length 
+    });
 });
 
-// Start intermission
-app.post('/intermission', (req, res) => {
-  const intermissionData = {
-    artist: '🎭 INTERMISSION',
-    isIntermission: true,
-    timeSlot: req.body.timeSlot || ''
-  };
-  
-  currentPerformer = intermissionData;
-  
-  // Send to all clients
-  const updateMessage = JSON.stringify({
-    type: 'update',
-    performer: intermissionData
-  });
-  
-  clients.forEach(client => {
-    try {
-      client.write(`data: ${updateMessage}\n\n`);
-    } catch (error) {
-      console.error('Error sending to client:', error);
-    }
-  });
-  
-  res.json({ success: true, message: 'Intermission started' });
-});
-
-// Health check endpoint
+// Health check
 app.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    currentPerformer,
-    connectedClients: clients.length,
-    historyCount: performerHistory.length,
-    uptime: process.uptime(),
-    endpoints: {
-      '/stream-lower-thirds.html': 'GET - The lower thirds HTML display',
-      '/events': 'GET - SSE for real-time updates',
-      '/update-performer': 'POST - Update current performer',
-      '/clear-performer': 'POST - Clear current performer',
-      '/current-performer': 'GET - Get current performer',
-      '/performer-history': 'GET - Get performer history',
-      '/intermission': 'POST - Start intermission',
-      '/health': 'GET - Health check'
-    }
-  });
+    res.json({ 
+        status: 'healthy',
+        uptime: process.uptime(),
+        connectedClients: sseClients.length,
+        currentPerformer: currentPerformer ? currentPerformer.artist : 'None'
+    });
 });
 
-// Root endpoint - show status
+// Serve specific overlay files
+app.get('/overlay', (req, res) => {
+    const overlayPath = path.join(__dirname, 'stream-lower-thirds.html');
+    if (fs.existsSync(overlayPath)) {
+        res.sendFile(overlayPath);
+    } else {
+        // Fallback to other possible names
+        const altPath = path.join(__dirname, 'lower-thirds.html');
+        if (fs.existsSync(altPath)) {
+            res.sendFile(altPath);
+        } else {
+            res.status(404).send('Overlay file not found');
+        }
+    }
+});
+
+// API documentation
 app.get('/', (req, res) => {
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>Lower Thirds Server</title>
-      <style>
-        body { 
-          font-family: Arial, sans-serif; 
-          max-width: 800px; 
-          margin: 50px auto; 
-          padding: 20px;
-          background: #1a1a1a;
-          color: white;
-        }
-        .status { 
-          background: #333; 
-          padding: 20px; 
-          border-radius: 10px; 
-          margin: 20px 0;
-        }
-        .endpoint {
-          background: #2a2a2a;
-          padding: 10px;
-          margin: 5px 0;
-          border-radius: 5px;
-          font-family: monospace;
-        }
-        h1 { color: #e91e63; }
-        .success { color: #4CAF50; }
-        .info { color: #2196F3; }
-        a { color: #e91e63; }
-      </style>
-    </head>
-    <body>
-      <h1>🎭 Lower Thirds Server</h1>
-      
-      <div class="status">
-        <h2 class="success">✅ Server Running</h2>
-        <p>Port: ${PORT}</p>
-        <p>Connected Clients: <strong>${clients.length}</strong></p>
-        <p>Current Performer: <strong>${currentPerformer ? currentPerformer.artist : 'None'}</strong></p>
-        <p>Uptime: ${Math.floor(process.uptime() / 60)} minutes</p>
-      </div>
-
-      <div class="status">
-        <h2 class="info">📺 Lower Thirds Display</h2>
-        <p>Open this in OBS Browser Source:</p>
-        <p><a href="/stream-lower-thirds.html" target="_blank">http://localhost:${PORT}/stream-lower-thirds.html</a></p>
-      </div>
-
-      <div class="status">
-        <h2>📡 Available Endpoints</h2>
-        <div class="endpoint">GET /stream-lower-thirds.html - Lower thirds display</div>
-        <div class="endpoint">GET /events - Real-time updates (SSE)</div>
-        <div class="endpoint">POST /update-performer - Update current performer</div>
-        <div class="endpoint">POST /clear-performer - Clear display</div>
-        <div class="endpoint">POST /intermission - Start intermission</div>
-        <div class="endpoint">GET /current-performer - Get current data</div>
-        <div class="endpoint">GET /health - Server health check</div>
-      </div>
-
-      <div class="status">
-        <h2>🔧 Test Commands</h2>
-        <p>Update performer (curl example):</p>
-        <pre style="background: #000; padding: 10px; overflow-x: auto;">
-curl -X POST http://localhost:${PORT}/update-performer \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "artist": "John Doe",
-    "songs": [{"title": "My Song", "writer": "Jane Smith"}],
-    "timeSlot": "8:00"
-  }'</pre>
-      </div>
-    </body>
-    </html>
-  `;
-  res.send(html);
+    res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Lower Thirds Server</title>
+            <style>
+                body {
+                    font-family: Arial, sans-serif;
+                    max-width: 800px;
+                    margin: 0 auto;
+                    padding: 20px;
+                    background: #1a1a1a;
+                    color: #fff;
+                }
+                h1 { color: #e91e63; }
+                h2 { color: #2196F3; }
+                .endpoint {
+                    background: #333;
+                    padding: 10px;
+                    margin: 10px 0;
+                    border-radius: 5px;
+                    font-family: monospace;
+                }
+                .status {
+                    background: #4CAF50;
+                    color: white;
+                    padding: 10px;
+                    border-radius: 5px;
+                    margin: 20px 0;
+                }
+                a { color: #2196F3; }
+            </style>
+        </head>
+        <body>
+            <h1>🎭 Lower Thirds Server</h1>
+            <div class="status">
+                ✅ Server Running on Port ${PORT}<br>
+                Connected Clients: ${sseClients.length}<br>
+                Current Performer: ${currentPerformer ? currentPerformer.artist : 'None'}<br>
+                Uptime: ${Math.floor(process.uptime())} seconds
+            </div>
+            
+            <h2>📺 Lower Thirds Display</h2>
+            <p>Open this in OBS Browser Source:</p>
+            <p><a href="/stream-lower-thirds.html" target="_blank">http://localhost:${PORT}/stream-lower-thirds.html</a></p>
+            
+            <h2>🎯 Available Endpoints</h2>
+            <div class="endpoint">GET /stream-lower-thirds.html - Lower thirds display</div>
+            <div class="endpoint">GET /events - Real-time updates (SSE)</div>
+            <div class="endpoint">POST /update-performer - Update current performer</div>
+            <div class="endpoint">POST /clear-performer - Clear display</div>
+            <div class="endpoint">POST /intermission - Start intermission</div>
+            <div class="endpoint">GET /current-performer - Get current data</div>
+            <div class="endpoint">GET /performer-history - Get performer history</div>
+            <div class="endpoint">GET /health - Server health check</div>
+        </body>
+        </html>
+    `);
 });
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`
+    console.log(`
 🎭 Lower Thirds Server Started!
-================================
-🌐 Server: http://localhost:${PORT}
-📺 Display: http://localhost:${PORT}/stream-lower-thirds.html
-📡 Real-time updates: Connected via SSE
+📺 Server: http://localhost:${PORT}
+📺 Overlay: http://localhost:${PORT}/stream-lower-thirds.html
+🎯 Status: http://localhost:${PORT}/
 
-OBS Setup:
-1. Add Browser Source
-2. URL: http://localhost:${PORT}/stream-lower-thirds.html
-3. Width: 1920, Height: 1080
-4. FPS: 30
-5. Uncheck "Shutdown source when not visible"
+Ready for connections...
+    `);
+});
 
-Ready for streaming! 🎬
-  `);
+// Graceful shutdown
+process.on('SIGINT', () => {
+    console.log('\nShutting down server...');
+    sseClients.forEach(client => {
+        client.res.end();
+    });
+    process.exit();
 });
