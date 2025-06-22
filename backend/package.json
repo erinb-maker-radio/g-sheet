@@ -2,11 +2,14 @@
   "name": "lower-thirds-server",
   "version": "1.0.0",
   "main": "lower-thirds-server.js",
-  "scripts": {
-    "start": "node lower-thirds-server.js",
-    "dev": "nodemon lower-thirds-server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
+"scripts": {
+  "start": "concurrently \"npm run start-react\" \"npm run start-lower-thirds\"",
+  "start-react": "react-scripts start",
+  "start-lower-thirds": "cd lower-thirds-server && node lower-thirds-server.js",
+  "test": "react-scripts test",
+  "build": "react-scripts build",
+  "eject": "react-scripts eject"
+}
   "keywords": [],
   "author": "",
   "license": "ISC",

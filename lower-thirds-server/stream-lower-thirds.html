@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>What Is Art - Lower Thirds</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: transparent;
+            overflow: hidden;
+            width: 1920px;
+            height: 1080px;
+        }
+
+        .lower-third {
+            position: absolute;
+            bottom: 50px;
+            left: 50px;
+            display: block; /* Always visible */
+        }
+
+        /* Main text container - NO BACKGROUND */
+        .main-info {
+            /* No background color - completely transparent */
+            padding: 0;
+            max-width: 800px;
+        }
+
+        /* Line 1: Episode - WHITE TEXT */
+        .episode-title {
+            font-size: 28px;
+            font-weight: bold;
+            color: white;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+        }
+
+        /* Line 2: Artist name - WHITE TEXT */
+        .artist-name {
+            font-size: 36px;
+            font-weight: bold;
+            color: white;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+        }
+
+        /* Line 3: Song title - WHITE TEXT */
+        .song-title {
+            font-size: 24px;
+            color: white;
+            font-style: italic;
+            margin-bottom: 4px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+        }
+
+        /* Line 4: Written by - WHITE TEXT */
+        .writer-info {
+            font-size: 18px;
+            color: white;
+            font-style: italic;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+        }
+
+        /* Logo container on the right */
+        .logo-container {
+            position: absolute;
+            bottom: 50px;
+            right: 50px;
+            height: 100px;
+            display: flex;
+            align-items: center;
+        }
+
+        .logo-container img {
+            height: 80px;
+            width: auto;
+            filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.8));
+        }
+
+        /* Text logo fallback - WHITE TEXT */
+        #textLogo {
+            color: white;
+            font-size: 24px;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+            text-align: center;
+            line-height: 1.2;
+        }
+
+        /* Intermission display */
+        .intermission-display {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            display: none;
+        }
+
+        .intermission-display.visible {
+            display: block;
+        }
+
+        /* Intermission text - WHITE */
+        .intermission-text {
+            font-size: 96px;
+            font-weight: bold;
+            color: white;
+            text-shadow: 3px 3px 8px rgba(0, 0, 0, 0.9);
+            margin-bottom: 20px;
+        }
+
+        .intermission-subtitle {
+            font-size: 36px;
+            color: white;
+            font-weight: 600;
+            text-shadow: 2px 2px 6px rgba(0, 0, 0, 0.8);
+        }
+    </style>
+</head>
+<body>
+    <!-- Main lower third - ALWAYS VISIBLE -->
+    <div class="lower-third" id="lowerThird">
+        <div class="main-info">
+            <!-- Line 1: Episode -->
+            <div class="episode-title" id="episodeTitle">WHAT IS ART? #122</div>
+            
+            <!-- Line 2: Artist -->
+            <div class="artist-name" id="artistName">LIVE NOW</div>
+            
+            <!-- Line 3: Song Title -->
+            <div class="song-title" id="songTitle">Open Mic Performance</div>
+            
+            <!-- Line 4: Written By -->
+            <div class="writer-info" id="writerInfo">What Is Art? • Maker Radio</div>
+        </div>
+    </div>
+    
+    <!-- Logo on the right -->
+    <div class="logo-container">
+        <img src="https://images.squarespace-cdn.com/content/v1/65233de405f7fd7c8c64268a/a7a30e11-5a04-42d8-aa24-39f00352e1e0/MakerRadioLogo2.png?format=300w" 
+             alt="Maker Radio" 
+             id="logoImg" 
+             crossorigin="anonymous"
+             onerror="document.getElementById('logoImg').style.display='none'; document.getElementById('textLogo').style.display='block';">
+        <!-- Fallback text logo -->
+        <div id="textLogo" style="display: none;">
+            MAKER<br>RADIO
+        </div>
+    </div>
+
+    <!-- Intermission display (hidden by default) -->
+    <div class="intermission-display" id="intermissionDisplay">
+        <div class="intermission-text">🎭 INTERMISSION 🎭</div>
+        <div class="intermission-subtitle">We'll be right back!</div>
+    </div>
+
+    <script>
+        // Calculate episode number
+        function getEpisodeNumber() {
+            const baseDate = new Date('2025-05-31');
+            const baseEpisode = 122;
+            const today = new Date();
+            const daysDiff = Math.floor((today - baseDate) / (1000 * 60 * 60 * 24));
+            const weeksPassed = Math.floor(daysDiff / 7);
+            return baseEpisode + weeksPassed;
+        }
+
+        // Set episode number on load
+        document.getElementById('episodeTitle').textContent = `WHAT IS ART? #${getEpisodeNumber()}`;
+
+        // Update display function
+        function updateDisplay(data) {
+            console.log('Updating display with:', data);
+            
+            const lowerThird = document.getElementById('lowerThird');
+            const intermissionDisplay = document.getElementById('intermissionDisplay');
+            
+            if (!data) {
+                // No data - show defaults
+                document.getElementById('artistName').textContent = 'LIVE NOW';
+                document.getElementById('songTitle').textContent = 'Open Mic Performance';
+                document.getElementById('writerInfo').textContent = 'What Is Art? • Maker Radio';
+                lowerThird.style.display = 'block';
+                intermissionDisplay.classList.remove('visible');
+                return;
+            }
+
+            // Handle intermission
+            if (data.isIntermission) {
+                // Hide normal display, show intermission
+                lowerThird.style.display = 'none';
+                intermissionDisplay.classList.add('visible');
+                return;
+            } else {
+                // Show normal display, hide intermission
+                lowerThird.style.display = 'block';
+                intermissionDisplay.classList.remove('visible');
+            }
+
+            // Update artist name
+            document.getElementById('artistName').textContent = (data.artist || 'PERFORMER').toUpperCase();
+
+            // Handle song data - support multiple formats
+            let songTitle = '';
+            let writer = '';
+            
+            if (data.song && typeof data.song === 'object') {
+                songTitle = data.song.title || '';
+                writer = data.song.writer || '';
+            } else {
+                // Support flat structure
+                songTitle = data.songTitle || data.title || '';
+                writer = data.songWriter || data.writer || '';
+            }
+
+            // Update song title
+            const songElement = document.getElementById('songTitle');
+            if (songTitle) {
+                songElement.textContent = songTitle;
+                songElement.style.display = 'block';
+            } else {
+                songElement.textContent = 'Performance';
+                songElement.style.display = 'block';
+            }
+
+            // Update writer info
+            const writerElement = document.getElementById('writerInfo');
+            if (writer) {
+                writerElement.textContent = `Written by ${writer}`;
+            } else {
+                writerElement.textContent = 'What Is Art? • Maker Radio';
+            }
+        }
+
+        // Manual update function for testing/backup
+        window.updateArtist = function(artist, songTitle, writer) {
+            updateDisplay({
+                artist: artist,
+                songTitle: songTitle,
+                songWriter: writer,
+                isIntermission: false
+            });
+        };
+
+        // Show intermission
+        window.showIntermission = function() {
+            updateDisplay({ isIntermission: true });
+        };
+
+        // Try to connect to server for live updates
+        let eventSource = null;
+        let reconnectInterval = null;
+
+        function connectToServer() {
+            try {
+                eventSource = new EventSource('http://localhost:3001/events');
+                
+                eventSource.onopen = () => {
+                    console.log('✅ Connected to lower thirds server');
+                    if (reconnectInterval) {
+                        clearInterval(reconnectInterval);
+                        reconnectInterval = null;
+                    }
+                };
+
+                eventSource.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        console.log('Received update:', data);
+                        
+                        if (data.performer) {
+                            updateDisplay(data.performer);
+                        } else if (data.type === 'clear') {
+                            updateDisplay(null);
+                        }
+                    } catch (error) {
+                        console.error('Error parsing data:', error);
+                    }
+                };
+
+                eventSource.onerror = (error) => {
+                    console.log('Server connection lost, will retry...');
+                    eventSource.close();
+                    
+                    // Retry connection every 5 seconds
+                    if (!reconnectInterval) {
+                        reconnectInterval = setInterval(connectToServer, 5000);
+                    }
+                };
+            } catch (error) {
+                console.log('Server not available - using default display');
+                // Retry in 5 seconds
+                if (!reconnectInterval) {
+                    reconnectInterval = setInterval(connectToServer, 5000);
+                }
+            }
+        }
+
+        // Try to connect on load
+        connectToServer();
+
+        // Ensure lower third is always visible
+        setInterval(() => {
+            const lowerThird = document.getElementById('lowerThird');
+            const intermission = document.getElementById('intermissionDisplay');
+            
+            // Make sure something is always visible
+            if (!intermission.classList.contains('visible') && lowerThird.style.display === 'none') {
+                lowerThird.style.display = 'block';
+            }
+        }, 1000);
+
+        // Example usage in console:
+        console.log('Lower Thirds Ready! Commands:');
+        console.log('updateArtist("John Doe", "My Song", "Jane Smith")');
+        console.log('showIntermission()');
+    </script>
+</body>
+</html>
