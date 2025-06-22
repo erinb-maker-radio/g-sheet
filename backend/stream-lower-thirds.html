@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lower Thirds - What Is Art?</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            width: 1920px;
+            height: 1080px;
+            position: relative;
+            overflow: hidden;
+            background: transparent;
+        }
+
+        .lower-third {
+            position: absolute;
+            bottom: 100px;
+            left: 100px;
+            display: none;
+            animation: slideIn 0.5s ease-out;
+        }
+
+        .lower-third.active {
+            display: block;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(-100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes slideOut {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateX(-100%);
+                opacity: 0;
+            }
+        }
+
+        .lower-third.hiding {
+            animation: slideOut 0.5s ease-in;
+        }
+
+        .content-wrapper {
+            background: linear-gradient(90deg, rgba(233, 30, 99, 0.95) 0%, rgba(156, 39, 176, 0.95) 100%);
+            padding: 20px 40px;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            max-width: 600px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .content-wrapper::before {
+            content: '';
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            right: -2px;
+            bottom: -2px;
+            background: linear-gradient(45deg, #e91e63, #9c27b0, #e91e63);
+            border-radius: 10px;
+            z-index: -1;
+            animation: glow 3s ease-in-out infinite;
+        }
+
+        @keyframes glow {
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 1; }
+        }
+
+        .artist-name {
+            font-size: 36px;
+            font-weight: bold;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+            margin-bottom: 8px;
+            letter-spacing: 1px;
+        }
+
+        .song-info {
+            font-size: 24px;
+            color: rgba(255, 255, 255, 0.95);
+            text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.5);
+            margin-bottom: 4px;
+        }
+
+        .song-writer {
+            font-size: 20px;
+            color: rgba(255, 255, 255, 0.85);
+            font-style: italic;
+            text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.5);
+        }
+
+        .time-slot {
+            position: absolute;
+            top: 20px;
+            right: 40px;
+            font-size: 18px;
+            color: rgba(255, 255, 255, 0.8);
+            font-weight: 600;
+            letter-spacing: 1px;
+        }
+
+        /* Intermission styles */
+        .intermission {
+            position: absolute;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: none;
+            animation: fadeIn 1s ease-out;
+        }
+
+        .intermission.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateX(-50%) scale(0.8); }
+            to { opacity: 1; transform: translateX(-50%) scale(1); }
+        }
+
+        .intermission-content {
+            background: linear-gradient(135deg, rgba(255, 107, 107, 0.95) 0%, rgba(255, 71, 87, 0.95) 100%);
+            padding: 30px 60px;
+            border-radius: 15px;
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.6);
+            text-align: center;
+        }
+
+        .intermission-text {
+            font-size: 48px;
+            font-weight: bold;
+            color: white;
+            text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.5);
+            letter-spacing: 3px;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        /* Debug info */
+        .debug {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-size: 14px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 5px;
+            display: none; /* Set to 'block' for debugging */
+        }
+    </style>
+</head>
+<body>
+    <!-- Debug info -->
+    <div class="debug" id="debug">
+        <div>Status: <span id="status">Waiting...</span></div>
+        <div>Connected: <span id="connected">No</span></div>
+    </div>
+
+    <!-- Regular lower third -->
+    <div class="lower-third" id="lowerThird">
+        <div class="content-wrapper">
+            <div class="time-slot" id="timeSlot"></div>
+            <div class="artist-name" id="artistName"></div>
+            <div class="song-info" id="songTitle"></div>
+            <div class="song-writer" id="songWriter"></div>
+        </div>
+    </div>
+
+    <!-- Intermission -->
+    <div class="intermission" id="intermission">
+        <div class="intermission-content">
+            <div class="intermission-text">🎭 INTERMISSION 🎭</div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const SERVER_URL = 'http://localhost:3001';
+        let eventSource = null;
+        let hideTimeout = null;
+        let isConnected = false;
+
+        // DOM elements
+        const lowerThird = document.getElementById('lowerThird');
+        const intermission = document.getElementById('intermission');
+        const artistName = document.getElementById('artistName');
+        const songTitle = document.getElementById('songTitle');
+        const songWriter = document.getElementById('songWriter');
+        const timeSlot = document.getElementById('timeSlot');
+        const statusEl = document.getElementById('status');
+        const connectedEl = document.getElementById('connected');
+
+        // Update debug info
+        function updateDebug(status) {
+            if (statusEl) statusEl.textContent = status;
+            if (connectedEl) connectedEl.textContent = isConnected ? 'Yes' : 'No';
+        }
+
+        // Connect to SSE
+        function connectSSE() {
+            console.log('Connecting to SSE...');
+            updateDebug('Connecting...');
+
+            eventSource = new EventSource(`${SERVER_URL}/events`);
+
+            eventSource.onopen = () => {
+                console.log('SSE Connected');
+                isConnected = true;
+                updateDebug('Connected');
+            };
+
+            eventSource.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    console.log('Received:', data);
+                    
+                    if (data.type === 'heartbeat') {
+                        updateDebug('Heartbeat received');
+                        return;
+                    }
+                    
+                    handleUpdate(data);
+                } catch (error) {
+                    console.error('Error parsing message:', error);
+                }
+            };
+
+            eventSource.onerror = (error) => {
+                console.error('SSE Error:', error);
+                isConnected = false;
+                updateDebug('Connection error - retrying...');
+                
+                // Reconnect after 5 seconds
+                setTimeout(() => {
+                    if (eventSource) {
+                        eventSource.close();
+                    }
+                    connectSSE();
+                }, 5000);
+            };
+        }
+
+        // Handle updates from server
+        function handleUpdate(data) {
+            if (data.type === 'clear' || !data.performer) {
+                hideLowerThird();
+                return;
+            }
+
+            const performer = data.performer;
+            
+            if (performer.isIntermission) {
+                showIntermission();
+            } else {
+                showLowerThird(performer);
+            }
+        }
+
+        // Show lower third
+        function showLowerThird(performer) {
+            console.log('Showing lower third:', performer);
+            updateDebug('Showing performer');
+            
+            // Hide intermission if showing
+            intermission.classList.remove('active');
+            
+            // Update content
+            artistName.textContent = performer.artist || '';
+            timeSlot.textContent = performer.timeSlot || '';
+            
+            // Handle song data
+            if (performer.song) {
+                songTitle.textContent = performer.song.title || '';
+                songWriter.textContent = performer.song.writer ? `Written by ${performer.song.writer}` : '';
+            } else {
+                songTitle.textContent = '';
+                songWriter.textContent = '';
+            }
+            
+            // Show with animation
+            lowerThird.classList.remove('hiding');
+            lowerThird.classList.add('active');
+            
+            // Clear any existing timeout
+            if (hideTimeout) {
+                clearTimeout(hideTimeout);
+                hideTimeout = null;
+            }
+            
+            // Auto-hide after 10 seconds unless keepVisible is true
+            if (!performer.keepVisible) {
+                hideTimeout = setTimeout(() => {
+                    hideLowerThird();
+                }, 10000);
+            }
+        }
+
+        // Show intermission
+        function showIntermission() {
+            console.log('Showing intermission');
+            updateDebug('Showing intermission');
+            
+            // Hide lower third
+            lowerThird.classList.remove('active');
+            
+            // Show intermission
+            intermission.classList.add('active');
+        }
+
+        // Hide lower third
+        function hideLowerThird() {
+            console.log('Hiding lower third');
+            updateDebug('Hidden');
+            
+            // Add hiding animation
+            if (lowerThird.classList.contains('active')) {
+                lowerThird.classList.add('hiding');
+                setTimeout(() => {
+                    lowerThird.classList.remove('active', 'hiding');
+                }, 500);
+            }
+            
+            // Hide intermission
+            intermission.classList.remove('active');
+            
+            // Clear timeout
+            if (hideTimeout) {
+                clearTimeout(hideTimeout);
+                hideTimeout = null;
+            }
+        }
+
+        // Start connection
+        connectSSE();
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            if (eventSource) {
+                eventSource.close();
+            }
+        });
+    </script>
+</body>
+</html>

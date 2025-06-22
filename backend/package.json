@@ -2,14 +2,14 @@
   "name": "lower-thirds-server",
   "version": "1.0.0",
   "main": "lower-thirds-server.js",
-"scripts": {
-  "start": "concurrently \"npm run start-react\" \"npm run start-lower-thirds\"",
-  "start-react": "react-scripts start",
-  "start-lower-thirds": "cd lower-thirds-server && node lower-thirds-server.js",
-  "test": "react-scripts test",
-  "build": "react-scripts build",
-  "eject": "react-scripts eject"
-}
+  "scripts": {
+    "start": "concurrently \"react-scripts start\" \"node lower-thirds-server.js\"",
+    "start-react": "react-scripts start",
+    "start-lower-thirds": "cd lower-thirds-server && node lower-thirds-server.js",
+    "test": "react-scripts test",
+    "build": "react-scripts build",
+    "eject": "react-scripts eject"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
@@ -20,6 +20,7 @@
     "ws": "^8.18.2"
   },
   "devDependencies": {
+    "concurrently": "^9.2.0",
     "nodemon": "^3.1.10"
   },
   "description": "Lower thirds server with YouTube API integration for stream-aware display"
