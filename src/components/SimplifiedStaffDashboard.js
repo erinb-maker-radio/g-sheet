@@ -7,6 +7,8 @@
  * - Automatic lower thirds updates when broadcasts go live
  * - OBS WebSocket integration
  * - Google Sheets performer data sync
+ * - OPTIMIZED: Fast YouTube API response time tracking
+ * - BULK DELETE: Select multiple completed broadcasts for deletion
  */
 
 import React, { useState, useEffect } from 'react';
@@ -36,6 +38,7 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState('');
   const [editingSongs, setEditingSongs] = useState({});   // Track which songs are in edit mode
+  const [selectedBroadcasts, setSelectedBroadcasts] = useState(new Set());  // Track selected broadcasts for bulk delete
 
   // ===== UTILITY FUNCTIONS =====
   
@@ -112,30 +115,40 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
     try {
       setLoading(true);
       const result = await youtubeService.listBroadcasts(50);
-      if (result.success) {
-        // Filter for recent broadcasts (last 7 days)
-        const sevenDaysAgo = new Date();
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-        
-        const recentBroadcasts = result.broadcasts.filter(broadcast => {
-          const createdDate = new Date(broadcast.snippet.publishedAt);
-          return createdDate > sevenDaysAgo;
-        });
-        
-        // Also filter for current episode number
-        const currentEpisode = getEpisodeNumber();
-        const currentEpisodeBroadcasts = result.broadcasts.filter(broadcast => {
-          return broadcast.snippet.title.includes(`#${currentEpisode}`);
-        });
-        
-        // Combine recent + current episode (remove duplicates)
-        const relevantBroadcasts = [...new Map(
-          [...recentBroadcasts, ...currentEpisodeBroadcasts].map(b => [b.id, b])
-        ).values()];
-        
-        setBroadcasts(relevantBroadcasts);
-        setStatus(`Found ${relevantBroadcasts.length} recent broadcasts (${result.broadcasts.length} total)`);
+      
+      // Check for quota errors
+      if (!result.success) {
+        if (result.quotaExceeded) {
+          setStatus('⚠️ YouTube API quota exceeded - waiting for reset at midnight PT');
+          return;
+        } else {
+          setStatus('❌ Error loading broadcasts: ' + result.error);
+          return;
+        }
       }
+      
+      // Filter for recent broadcasts (last 7 days)
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      
+      const recentBroadcasts = result.broadcasts.filter(broadcast => {
+        const createdDate = new Date(broadcast.snippet.publishedAt);
+        return createdDate > sevenDaysAgo;
+      });
+      
+      // Also filter for current episode number
+      const currentEpisode = getEpisodeNumber();
+      const currentEpisodeBroadcasts = result.broadcasts.filter(broadcast => {
+        return broadcast.snippet.title.includes(`#${currentEpisode}`);
+      });
+      
+      // Combine recent + current episode (remove duplicates)
+      const relevantBroadcasts = [...new Map(
+        [...recentBroadcasts, ...currentEpisodeBroadcasts].map(b => [b.id, b])
+      ).values()];
+      
+      setBroadcasts(relevantBroadcasts);
+      setStatus(`Found ${relevantBroadcasts.length} recent broadcasts (${result.broadcasts.length} total)`);
     } catch (error) {
       console.error('Error loading broadcasts:', error);
       setStatus('Error loading broadcasts');
@@ -154,17 +167,27 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
     try {
       setLoading(true);
       const result = await youtubeService.listBroadcasts(50);
-      if (result.success) {
-        // Sort broadcasts by creation date - NEWEST FIRST
-        const sortedBroadcasts = result.broadcasts.sort((a, b) => {
-          const dateA = new Date(a.snippet.publishedAt);
-          const dateB = new Date(b.snippet.publishedAt);
-          return dateB - dateA; // Newest first (descending order)
-        });
-        
-        setBroadcasts(sortedBroadcasts);
-        setStatus(`Loaded ALL ${result.broadcasts.length} broadcasts (sorted by date, newest first)`);
+      
+      // Check for quota errors
+      if (!result.success) {
+        if (result.quotaExceeded) {
+          setStatus('⚠️ YouTube API quota exceeded - waiting for reset at midnight PT');
+          return;
+        } else {
+          setStatus('❌ Error loading broadcasts: ' + result.error);
+          return;
+        }
       }
+      
+      // Sort broadcasts by creation date - NEWEST FIRST
+      const sortedBroadcasts = result.broadcasts.sort((a, b) => {
+        const dateA = new Date(a.snippet.publishedAt);
+        const dateB = new Date(b.snippet.publishedAt);
+        return dateB - dateA; // Newest first (descending order)
+      });
+      
+      setBroadcasts(sortedBroadcasts);
+      setStatus(`Loaded ALL ${result.broadcasts.length} broadcasts (sorted by date, newest first)`);
     } catch (error) {
       console.error('Error loading all broadcasts:', error);
       setStatus('Error loading all broadcasts');
@@ -322,6 +345,79 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
     setLoading(false);
   };
 
+  /**
+   * Bulk delete selected completed broadcasts
+   */
+  const bulkDeleteSelectedBroadcasts = async () => {
+    if (selectedBroadcasts.size === 0) {
+      alert('No broadcasts selected');
+      return;
+    }
+
+    const selectedArray = Array.from(selectedBroadcasts);
+    const broadcastTitles = selectedArray.map(id => {
+      const broadcast = broadcasts.find(b => b.id === id);
+      return broadcast ? broadcast.snippet.title : id;
+    });
+
+    if (!window.confirm(`Delete ${selectedArray.length} selected broadcasts?\n\n${broadcastTitles.slice(0, 3).join('\n')}${selectedArray.length > 3 ? `\n...and ${selectedArray.length - 3} more` : ''}`)) {
+      return;
+    }
+
+    setLoading(true);
+    setStatus(`Deleting ${selectedArray.length} selected broadcasts...`);
+    
+    let deleted = 0;
+    
+    for (const broadcastId of selectedArray) {
+      try {
+        const result = await youtubeService.deleteBroadcast(broadcastId);
+        if (result.success) {
+          deleted++;
+        }
+        
+        // Rate limiting to avoid API quota issues
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+      } catch (error) {
+        console.error(`Error deleting broadcast ${broadcastId}:`, error);
+      }
+    }
+    
+    setStatus(`✅ Deleted ${deleted} of ${selectedArray.length} broadcasts`);
+    setSelectedBroadcasts(new Set()); // Clear selection
+    await loadBroadcasts(); // Refresh the list
+    setLoading(false);
+  };
+
+  /**
+   * Toggle selection of a broadcast
+   */
+  const toggleBroadcastSelection = (broadcastId) => {
+    const newSelected = new Set(selectedBroadcasts);
+    if (newSelected.has(broadcastId)) {
+      newSelected.delete(broadcastId);
+    } else {
+      newSelected.add(broadcastId);
+    }
+    setSelectedBroadcasts(newSelected);
+  };
+
+  /**
+   * Select all completed broadcasts
+   */
+  const selectAllCompletedBroadcasts = () => {
+    const completedIds = getCompletedBroadcasts().map(b => b.id);
+    setSelectedBroadcasts(new Set(completedIds));
+  };
+
+  /**
+   * Clear all selections
+   */
+  const clearAllSelections = () => {
+    setSelectedBroadcasts(new Set());
+  };
+
   // ===== DATA PROCESSING FUNCTIONS =====
   
   /**
@@ -432,69 +528,128 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
   
   /**
    * Check for live broadcasts and update lower thirds automatically
+   * OPTIMIZED VERSION with DETAILED TIMING ANALYSIS
    */
   const checkForLiveBroadcast = async () => {
+    const startTime = Date.now();
+    const timestamp = new Date().toISOString();
+    console.log(`🕐 [${timestamp}] Starting broadcast check...`);
+    
     try {
       // Get current broadcasts
+      const apiCallStart = Date.now();
       const result = await youtubeService.listBroadcasts(10);
-      if (!result.success) return;
+      const apiCallEnd = Date.now();
       
-      // Find any live broadcast
+      const responseTime = apiCallEnd - startTime;
+      console.log(`📡 [${new Date().toISOString()}] YouTube API response time: ${responseTime}ms`);
+      
+      // Check for quota errors - don't clear lower thirds on quota errors!
+      if (!result.success) {
+        if (result.quotaExceeded) {
+          console.log('⚠️ YouTube API quota exceeded - maintaining current state');
+          setStatus('⚠️ YouTube API quota exceeded - waiting for reset at midnight PT');
+          return; // Don't change anything
+        }
+        console.error('❌ YouTube API error:', result.error);
+        return;
+      }
+      
+      // Log ALL broadcast statuses for analysis
+      console.log(`📊 [${new Date().toISOString()}] Found ${result.broadcasts.length} broadcasts:`);
+      result.broadcasts.forEach((broadcast, index) => {
+        console.log(`   ${index + 1}. "${broadcast.snippet.title}" - Status: ${broadcast.status.lifeCycleStatus}`);
+      });
+      
+      // Find any live or testing broadcast
       const liveBroadcast = result.broadcasts.find(
-        broadcast => broadcast.status.lifeCycleStatus === 'live'
+        broadcast => broadcast.status.lifeCycleStatus === 'live' || broadcast.status.lifeCycleStatus === 'testing'
       );
       
-      if (liveBroadcast && liveBroadcast.id !== lastLiveBroadcastId) {
-        // New live broadcast detected!
-        console.log('New live broadcast detected:', liveBroadcast.snippet.title);
-        setLastLiveBroadcastId(liveBroadcast.id);
-        setStreamingBroadcastId(liveBroadcast.id);
+      if (liveBroadcast) {
+        console.log(`🎯 [${new Date().toISOString()}] Found ${liveBroadcast.status.lifeCycleStatus} broadcast: "${liveBroadcast.snippet.title}"`);
         
-        // Parse the broadcast title
-        // Format: "What Is Art? #124 | Artist Name | Song Title"
-        const titleMatch = liveBroadcast.snippet.title.match(/What Is Art\? #\d+ \| (.+) \| (.+)$/);
+        if (liveBroadcast.id !== lastLiveBroadcastId) {
+          // Handle new live broadcast
+          console.log(`🚨 [${new Date().toISOString()}] NEW ${liveBroadcast.status.lifeCycleStatus.toUpperCase()} BROADCAST DETECTED!`);
+          console.log(`   Previous ID: ${lastLiveBroadcastId}`);
+          console.log(`   New ID: ${liveBroadcast.id}`);
+          
+          setLastLiveBroadcastId(liveBroadcast.id);
+          setStreamingBroadcastId(liveBroadcast.id);
+          
+          // Parse and update lower thirds...
+          const parseStart = Date.now();
+          const titleMatch = liveBroadcast.snippet.title.match(/What Is Art\? #\d+ \| (.+) \| (.+)$/);
+          
+          if (titleMatch) {
+            const [, artist, songTitle] = titleMatch;
+            const description = liveBroadcast.snippet.description || '';
+            const writerMatch = description.match(/Written by: (.+)/m);
+            const timeSlotMatch = description.match(/Time Slot: (.+)/m);
+            
+            const performerData = {
+              artist: artist.trim(),
+              songTitle: songTitle.trim(),
+              songWriter: writerMatch ? writerMatch[1].trim() : '',
+              timeSlot: timeSlotMatch ? timeSlotMatch[1].trim() : '',
+              isIntermission: false
+            };
+            
+            const parseTime = Date.now() - parseStart;
+            console.log(`🎭 [${new Date().toISOString()}] Parsed performer data in ${parseTime}ms:`, performerData);
+            
+            try {
+              const lowerThirdsStart = Date.now();
+              console.log(`📺 [${new Date().toISOString()}] Sending to lower thirds service...`);
+              
+              await lowerThirdsService.updatePerformer(performerData);
+              
+              const lowerThirdsTime = Date.now() - lowerThirdsStart;
+              console.log(`✅ [${new Date().toISOString()}] Lower thirds updated in ${lowerThirdsTime}ms`);
+              
+              const totalTime = Date.now() - startTime;
+              console.log(`⏱️ [${new Date().toISOString()}] TOTAL TIME FROM START TO LOWER THIRDS: ${totalTime}ms`);
+              
+              setStatus(`🔴 ${liveBroadcast.status.lifeCycleStatus === 'testing' ? 'Testing' : 'Live'}: ${performerData.artist} - ${performerData.songTitle}`);
+            } catch (error) {
+              console.error(`❌ [${new Date().toISOString()}] Error updating lower thirds:`, error);
+            }
+          } else {
+            console.error(`❌ [${new Date().toISOString()}] Could not parse broadcast title: "${liveBroadcast.snippet.title}"`);
+          }
+        } else {
+          // Same broadcast still live - no action needed
+          console.log(`✓ [${new Date().toISOString()}] Same broadcast still ${liveBroadcast.status.lifeCycleStatus}, no action needed`);
+        }
+      } else {
+        console.log(`📭 [${new Date().toISOString()}] No live/testing broadcasts found`);
         
-        if (titleMatch) {
-          const [, artist, songTitle] = titleMatch;
+        if (lastLiveBroadcastId) {
+          // Stream ended - NO live broadcasts found
+          console.log(`🛑 [${new Date().toISOString()}] Previous broadcast ended - clearing lower thirds`);
+          setLastLiveBroadcastId(null);
+          setStreamingBroadcastId(null);
           
-          // Parse the description for additional info
-          const description = liveBroadcast.snippet.description || '';
-          const writerMatch = description.match(/Written by: (.+)/m);
-          const timeSlotMatch = description.match(/Time Slot: (.+)/m);
-          
-          const performerData = {
-            artist: artist.trim(),
-            songTitle: songTitle.trim(),
-            songWriter: writerMatch ? writerMatch[1].trim() : '',
-            timeSlot: timeSlotMatch ? timeSlotMatch[1].trim() : '',
-            isIntermission: false
-          };
-          
-          // Update lower thirds
+          // Clear lower thirds immediately
           try {
-            await lowerThirdsService.updatePerformer(performerData);
-            console.log('Lower thirds auto-updated for live broadcast:', performerData);
-            setStatus(`🔴 Live: ${performerData.artist} - ${performerData.songTitle}`);
+            const clearStart = Date.now();
+            await lowerThirdsService.clearPerformer();
+            const clearTime = Date.now() - clearStart;
+            console.log(`🧹 [${new Date().toISOString()}] Lower thirds cleared in ${clearTime}ms`);
+            setStatus('No live streams - Lower thirds cleared');
           } catch (error) {
-            console.error('Error updating lower thirds:', error);
+            console.error(`❌ [${new Date().toISOString()}] Error clearing lower thirds:`, error);
           }
         }
-      } else if (!liveBroadcast && lastLiveBroadcastId) {
-        // Stream ended
-        console.log('Live broadcast ended');
-        setLastLiveBroadcastId(null);
-        setStreamingBroadcastId(null);
-        
-        // Clear lower thirds
-        try {
-          await lowerThirdsService.clearPerformer();
-          setStatus('Stream ended - Lower thirds cleared');
-        } catch (error) {
-          console.error('Error clearing lower thirds:', error);
-        }
       }
+      
+      const totalCheckTime = Date.now() - startTime;
+      console.log(`🏁 [${new Date().toISOString()}] Broadcast check completed in ${totalCheckTime}ms\n`);
+      
     } catch (error) {
-      console.error('Error checking for live broadcast:', error);
+      console.error(`💥 [${new Date().toISOString()}] Error checking for live broadcast:`, error);
+      // Don't clear lower thirds on network errors
     }
   };
 
@@ -527,12 +682,7 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
         console.error('Error clearing lower thirds:', error);
       }
     }
-    // For "Stage Cameras" or other performance scenes, the lower thirds 
-    // will be updated when clicking on a performer/song in the dashboard
   };
-
-
- 
 
   // ===== INITIALIZATION =====
   
@@ -576,16 +726,21 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
   useEffect(() => {
     if (!youtubeSignedIn) return;
     
-    // Check for live broadcasts every 5 seconds
+    console.log(`🎬 [${new Date().toISOString()}] Starting YouTube broadcast monitoring...`);
+    
+    // Check for live broadcasts every 1 second for faster detection
     const interval = setInterval(async () => {
       await checkForLiveBroadcast();
-    }, 5000);
+    }, 1000); // Reduced from 2000ms to 1000ms for faster detection
     
     // Initial check
     checkForLiveBroadcast();
     
-    return () => clearInterval(interval);
-  }, [youtubeSignedIn, lastLiveBroadcastId, broadcasts]);
+    return () => {
+      console.log(`🎬 [${new Date().toISOString()}] Stopping YouTube broadcast monitoring`);
+      clearInterval(interval);
+    };
+  }, [youtubeSignedIn, lastLiveBroadcastId]);
 
   // ===== COMPUTED VALUES =====
   
@@ -647,10 +802,17 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
     marginBottom: '20px',
     background: status.includes('✅') ? 'rgba(76, 175, 80, 0.2)' : 
                status.includes('❌') ? 'rgba(244, 67, 54, 0.2)' : 
+               status.includes('🔴') ? 'rgba(244, 67, 54, 0.2)' :
+               status.includes('⚠️') ? 'rgba(255, 193, 7, 0.2)' :
                'rgba(33, 150, 243, 0.2)',
     border: `1px solid ${status.includes('✅') ? '#4CAF50' : 
-                          status.includes('❌') ? '#f44336' : '#2196F3'}`,
-    color: 'white'
+                          status.includes('❌') ? '#f44336' : 
+                          status.includes('🔴') ? '#f44336' : 
+                          status.includes('⚠️') ? '#FFC107' : '#2196F3'}`,
+    color: 'white',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center'
   };
 
   const editInputStyle = {
@@ -707,7 +869,16 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
       {/* Status Display */}
       {status && (
         <div style={statusStyle}>
-          {status}
+          <span>{status}</span>
+          {/* Add response time indicator */}
+          {status.includes('Live:') && (
+            <span style={{ 
+              fontSize: '12px', 
+              opacity: 0.7 
+            }}>
+              Check console for API response times
+            </span>
+          )}
         </div>
       )}
 
@@ -739,6 +910,27 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
           >
             {youtubeSignedIn ? '✅ YouTube Ready' : '📺 Sign in YouTube'}
           </button>
+          
+          {/* Manual Clear Lower Thirds Button */}
+          <button
+            onClick={async () => {
+              try {
+                await lowerThirdsService.clearPerformer();
+                setStatus('✅ Lower thirds cleared manually');
+                console.log('Lower thirds cleared manually');
+              } catch (error) {
+                console.error('Error clearing lower thirds:', error);
+                setStatus('❌ Failed to clear lower thirds');
+              }
+            }}
+            style={{
+              ...buttonStyle,
+              background: '#607D8B',
+              opacity: 1
+            }}
+          >
+            🧹 Clear Lower Thirds
+          </button>
         </div>
         
         {/* Auto Lower Thirds Status */}
@@ -752,7 +944,12 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
             fontSize: '14px',
             color: '#E1BEE7'
           }}>
-            🎯 <strong>Auto Lower Thirds:</strong> Active - Monitoring for live broadcasts
+            🎯 <strong>Auto Lower Thirds:</strong> Active - Monitoring for live broadcasts every 2 seconds
+            {lastLiveBroadcastId && 
+              <span style={{ marginLeft: '10px', color: '#4CAF50' }}>
+                🔴 Currently showing performer info
+              </span>
+            }
           </div>
         )}
       </div>
@@ -911,7 +1108,6 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
                             toggleEditMode(songData.id);
                           }
                           createSongBroadcast(songData.performer, songData.song, songData.songIndex);
-                         
                         }}
                         disabled={loading}
                         style={{
@@ -1130,11 +1326,69 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
         )}
       </div>
 
-      {/* Completed Broadcasts Section */}
+      {/* Completed Broadcasts Section with Bulk Delete */}
       <div style={cardStyle}>
-        <h2 style={{ color: '#9C27B0', marginBottom: '20px' }}>
-          ✅ Completed Broadcasts ({completedBroadcasts.length})
-        </h2>
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '20px'
+        }}>
+          <h2 style={{ color: '#9C27B0', margin: 0 }}>
+            ✅ Completed Broadcasts ({completedBroadcasts.length})
+          </h2>
+          
+          {/* Bulk Actions */}
+          {completedBroadcasts.length > 0 && (
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              <span style={{ color: '#aaa', fontSize: '14px' }}>
+                {selectedBroadcasts.size > 0 && `${selectedBroadcasts.size} selected`}
+              </span>
+              
+              <button
+                onClick={selectAllCompletedBroadcasts}
+                disabled={selectedBroadcasts.size === completedBroadcasts.length}
+                style={{
+                  ...buttonStyle,
+                  background: '#607D8B',
+                  padding: '6px 12px',
+                  fontSize: '12px',
+                  opacity: selectedBroadcasts.size === completedBroadcasts.length ? 0.5 : 1
+                }}
+              >
+                Select All
+              </button>
+              
+              <button
+                onClick={clearAllSelections}
+                disabled={selectedBroadcasts.size === 0}
+                style={{
+                  ...buttonStyle,
+                  background: '#666',
+                  padding: '6px 12px',
+                  fontSize: '12px',
+                  opacity: selectedBroadcasts.size === 0 ? 0.5 : 1
+                }}
+              >
+                Clear
+              </button>
+              
+              <button
+                onClick={bulkDeleteSelectedBroadcasts}
+                disabled={selectedBroadcasts.size === 0 || loading}
+                style={{
+                  ...buttonStyle,
+                  background: selectedBroadcasts.size === 0 || loading ? '#666' : '#f44336',
+                  padding: '6px 12px',
+                  fontSize: '12px',
+                  opacity: selectedBroadcasts.size === 0 || loading ? 0.5 : 1
+                }}
+              >
+                🗑️ Delete Selected ({selectedBroadcasts.size})
+              </button>
+            </div>
+          )}
+        </div>
         
         {completedBroadcasts.length === 0 ? (
           <p style={{ color: '#888', textAlign: 'center', padding: '40px' }}>
@@ -1148,72 +1402,96 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
             maxHeight: '400px',
             overflowY: 'auto'
           }}>
-            {completedBroadcasts.map(broadcast => (
-              <div
-                key={broadcast.id}
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '12px',
-                  background: 'rgba(156, 39, 176, 0.1)',
-                  border: '1px solid #9C27B0',
-                  borderRadius: '8px'
-                }}
-              >
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: '16px', fontWeight: '600', marginBottom: '4px' }}>
-                    {broadcast.snippet.title}
+            {completedBroadcasts.map(broadcast => {
+              const isSelected = selectedBroadcasts.has(broadcast.id);
+              
+              return (
+                <div
+                  key={broadcast.id}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '12px',
+                    background: isSelected ? 'rgba(156, 39, 176, 0.2)' : 'rgba(156, 39, 176, 0.1)',
+                    border: isSelected ? '2px solid #9C27B0' : '1px solid #9C27B0',
+                    borderRadius: '8px',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
+                    {/* Checkbox */}
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleBroadcastSelection(broadcast.id)}
+                      style={{
+                        transform: 'scale(1.2)',
+                        accentColor: '#9C27B0',
+                        cursor: 'pointer'
+                      }}
+                    />
+                    
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: '16px', fontWeight: '600', marginBottom: '4px' }}>
+                        {broadcast.snippet.title}
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#aaa' }}>
+                        Completed: {new Date(broadcast.snippet.publishedAt).toLocaleDateString()} | 
+                        Privacy: {broadcast.status.privacyStatus}
+                      </div>
+                    </div>
                   </div>
-                  <div style={{ fontSize: '12px', color: '#aaa' }}>
-                    Completed: {new Date(broadcast.snippet.publishedAt).toLocaleDateString()} | 
-                    Privacy: {broadcast.status.privacyStatus}
-                  </div>
-                </div>
-                
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <a
-                    href={`https://www.youtube.com/watch?v=${broadcast.id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      ...buttonStyle,
-                      background: '#FF0000',
-                      padding: '8px 16px',
-                      fontSize: '14px',
-                      textDecoration: 'none',
-                      display: 'inline-block'
-                    }}
-                  >
-                    📺 Watch
-                  </a>
                   
-                  <button
-                    onClick={async () => {
-                      if (window.confirm('Delete this completed broadcast?')) {
-                        setLoading(true);
-                        const result = await youtubeService.deleteBroadcast(broadcast.id);
-                        if (result.success) {
-                          setStatus('✅ Broadcast deleted');
-                          await loadBroadcasts();
-                        } else {
-                          setStatus('❌ Failed to delete broadcast');
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <a
+                      href={`https://www.youtube.com/watch?v=${broadcast.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        ...buttonStyle,
+                        background: '#FF0000',
+                        padding: '6px 12px',
+                        fontSize: '12px',
+                        textDecoration: 'none',
+                        display: 'inline-block'
+                      }}
+                    >
+                      📺 Watch
+                    </a>
+                    
+                    <button
+                      onClick={async () => {
+                        if (window.confirm('Delete this completed broadcast?')) {
+                          setLoading(true);
+                          const result = await youtubeService.deleteBroadcast(broadcast.id);
+                          if (result.success) {
+                            setStatus('✅ Broadcast deleted');
+                            setSelectedBroadcasts(prev => {
+                              const newSet = new Set(prev);
+                              newSet.delete(broadcast.id);
+                              return newSet;
+                            });
+                            await loadBroadcasts();
+                          } else {
+                            setStatus('❌ Failed to delete broadcast');
+                          }
+                          setLoading(false);
                         }
-                        setLoading(false);
-                      }
-                    }}
-                    style={{
-                      ...buttonStyle,
-                      background: '#f44336',
-                      padding: '8px 16px',
-                      fontSize: '14px'
-                    }}
-                  >
-                    🗑️ Delete
-                  </button>
+                      }}
+                      style={{
+                        ...buttonStyle,
+                        background: '#f44336',
+                        padding: '6px 12px',
+                        fontSize: '12px'
+                      }}
+                    >
+                      🗑️
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -1243,12 +1521,7 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
           </div>
         </div>
       )}
-    
-
-
-
-
-</div>
+    </div>
   );
 };
 

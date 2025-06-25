@@ -175,32 +175,42 @@ class YouTubeService {
   }
 
   // List user's broadcasts
-  async listBroadcasts(maxResults = 10) {
-    if (!this.isSignedIn) {
-      return { success: false, error: 'Not signed in to YouTube' };
-    }
+async listBroadcasts(maxResults = 10) {
+  if (!this.isSignedIn) {
+    return { success: false, error: 'Not signed in to YouTube' };
+  }
 
-    try {
-      const response = await gapi.client.youtube.liveBroadcasts.list({
-        part: 'snippet,status',
-        mine: true,
-        maxResults: maxResults,
-        broadcastType: 'all'
-      });
+  try {
+    const response = await gapi.client.youtube.liveBroadcasts.list({
+      part: 'snippet,status',
+      mine: true,
+      maxResults: maxResults,
+      broadcastType: 'all'
+    });
 
-      return {
-        success: true,
-        broadcasts: response.result.items || []
-      };
+    return {
+      success: true,
+      broadcasts: response.result.items || []
+    };
 
-    } catch (error) {
-      console.error('Error listing broadcasts:', error);
+  } catch (error) {
+    console.error('Error listing broadcasts:', error);
+    
+    // Check for quota errors
+    if (error.status === 403 && error.result?.error?.errors?.[0]?.reason === 'quotaExceeded') {
       return { 
         success: false, 
-        error: error.result?.error?.message || error.message 
+        error: 'YouTube API quota exceeded. Resets at midnight PT.',
+        quotaExceeded: true
       };
     }
+    
+    return { 
+      success: false, 
+      error: error.result?.error?.message || error.message 
+    };
   }
+}
 
   // Get stream key for a broadcast
   async getStreamKey(broadcastId) {
