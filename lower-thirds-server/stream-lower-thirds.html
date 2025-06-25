@@ -1,254 +1,269 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>What Is Art? Lower Thirds</title>
     <style>
         body {
             margin: 0;
             padding: 0;
+            width: 1920px;
+            height: 1080px;
             background: transparent;
             font-family: Arial, sans-serif;
             overflow: hidden;
-            width: 1920px;
-            height: 1080px;
         }
-        
-        /* Always visible container */
+
         .lower-third {
             position: absolute;
-            bottom: 50px;
-            left: 50px;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 300px;
+            background: transparent;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            padding: 20px 40px;
+            box-sizing: border-box;
+        }
+
+        .text-content {
+            flex-grow: 1;
+            max-width: 1400px;
+        }
+
+        .episode-title {
+            font-size: 24px;
+            font-weight: bold;
             color: white;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
-        }
-        
-        /* Content that can be hidden */
-        .content {
-            opacity: 0;
-            transition: opacity 0.5s ease-in-out;
-        }
-        
-        .content.visible {
-            opacity: 1;
-        }
-        
-        .show-title {
-            font-size: 28px;
-            font-weight: bold;
-            text-transform: uppercase;
-            margin-bottom: 10px;
-        }
-        
-        .artist-name {
-            font-size: 36px;
-            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
             text-transform: uppercase;
             margin-bottom: 8px;
+            line-height: 1.2;
         }
-        
+
+        .artist-name {
+            font-size: 24px;
+            font-weight: bold;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+            text-transform: uppercase;
+            margin-bottom: 6px;
+            line-height: 1.2;
+        }
+
         .song-title {
             font-size: 24px;
             font-style: italic;
-            margin-bottom: 6px;
-        }
-        
-        .writer-name {
-            font-size: 18px;
-            font-style: italic;
-        }
-        
-        .logo {
-            position: absolute;
-            bottom: 50px;
-            right: 50px;
             color: white;
-            font-size: 24px;
-            font-weight: bold;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+            margin-bottom: 4px;
+            line-height: 1.2;
         }
-        
-        /* Debug info */
-        .debug {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            background: rgba(0,0,0,0.7);
-            color: #0f0;
-            padding: 10px;
-            font-family: monospace;
-            font-size: 14px;
-            border: 1px solid #0f0;
-            display: none; /* Change to 'block' to see debug */
+
+        .writer-line {
+            font-size: 24px;
+            font-style: italic;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+            line-height: 1.2;
+        }
+
+        .logo-container {
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-end;
+            margin-left: 40px;
+            min-width: 200px;
+        }
+
+        .logo-image {
+            max-width: 180px;
+            max-height: 120px;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+            filter: drop-shadow(2px 2px 4px rgba(0, 0, 0, 0.8));
+            transition: opacity 0.3s ease;
+        }
+
+        .logo-fallback {
+            font-size: 18px;
+            font-weight: bold;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+            text-align: center;
+            line-height: 1.2;
+            display: none;
+        }
+
+        /* Show fallback text if image fails */
+        .logo-image.failed + .logo-fallback {
+            display: block;
+        }
+
+        .logo-image.failed {
+            display: none;
+        }
+
+        /* Animation for smooth updates */
+        .text-content div {
+            transition: opacity 0.3s ease;
+        }
+
+        /* Ensure visibility */
+        .lower-third {
+            visibility: visible !important;
+            opacity: 1 !important;
+            display: flex !important;
         }
     </style>
 </head>
 <body>
-    <!-- Debug panel -->
-    <div class="debug" id="debug"></div>
-    
-    <!-- Lower third container -->
     <div class="lower-third">
-        <div class="content" id="content">
-            <div class="show-title" id="showTitle">WHAT IS ART? #125</div>
-            <div class="artist-name" id="artistName">LOADING...</div>
-            <div class="song-title" id="songTitle"></div>
-            <div class="writer-name" id="writerName"></div>
+        <div class="text-content">
+            <div class="episode-title" id="episodeTitle">WHAT IS ART? #124</div>
+            <div class="artist-name" id="artistName">LIVE NOW</div>
+            <div class="song-title" id="songTitle">Open Mic Performance</div>
+            <div class="writer-line" id="writerLine">What Is Art? • Maker Radio</div>
+        </div>
+        
+        <div class="logo-container">
+            <img 
+                class="logo-image" 
+                id="logoImage"
+                src="./MakerRadioLogo2.png"
+                alt="Maker Radio Logo"
+                onerror="this.classList.add('failed')"
+            >
+            <div class="logo-fallback">MAKER RADIO</div>
         </div>
     </div>
-    
-    <!-- Logo -->
-    <div class="logo">MAKER RADIO</div>
-    
+
     <script>
-        console.log('[Lower Thirds] Script starting...');
-        
-        // Debug function
-        function debug(msg) {
-            console.log('[Lower Thirds]', msg);
-            const debugEl = document.getElementById('debug');
-            if (debugEl) {
-                const time = new Date().toLocaleTimeString();
-                debugEl.innerHTML = `${time}: ${msg}<br>` + debugEl.innerHTML;
-                // Keep only last 10 messages
-                const lines = debugEl.innerHTML.split('<br>');
-                if (lines.length > 10) {
-                    debugEl.innerHTML = lines.slice(0, 10).join('<br>');
+        // Calculate current episode number
+        function getEpisodeNumber() {
+            const baseDate = new Date('2025-05-22');
+            const baseEpisode = 120;
+            const currentDate = new Date();
+            const weeksDiff = Math.floor((currentDate - baseDate) / (7 * 24 * 60 * 60 * 1000));
+            return baseEpisode + weeksDiff;
+        }
+
+        // Initialize with current episode
+        document.getElementById('episodeTitle').textContent = `WHAT IS ART? #${getEpisodeNumber()}`;
+
+        // Update performer information
+        function updatePerformer(data) {
+            console.log('Updating performer:', data);
+            
+            const episodeTitle = document.getElementById('episodeTitle');
+            const artistName = document.getElementById('artistName');
+            const songTitle = document.getElementById('songTitle');
+            const writerLine = document.getElementById('writerLine');
+
+            if (data) {
+                episodeTitle.textContent = `WHAT IS ART? #${getEpisodeNumber()}`;
+                artistName.textContent = (data.artist || 'LIVE NOW').toUpperCase();
+                songTitle.textContent = data.songTitle || data.song?.title || 'Open Mic Performance';
+                
+                // Handle writer line
+                const writer = data.songWriter || data.song?.writer || data.writer;
+                if (writer) {
+                    writerLine.textContent = `Written by: ${writer}`;
+                } else {
+                    writerLine.textContent = 'What Is Art? • Maker Radio';
                 }
             }
         }
-        
-        // Calculate episode number
-        function getEpisodeNumber() {
-            const baseDate = new Date('2025-05-31');
-            const baseEpisode = 122;
-            const today = new Date();
-            const weeksPassed = Math.floor((today - baseDate) / (1000 * 60 * 60 * 24 * 7));
-            return baseEpisode + weeksPassed;
-        }
-        
-        // Elements
-        const content = document.getElementById('content');
-        const showTitle = document.getElementById('showTitle');
-        const artistName = document.getElementById('artistName');
-        const songTitle = document.getElementById('songTitle');
-        const writerName = document.getElementById('writerName');
-        
-        // Update episode number immediately
-        showTitle.textContent = `WHAT IS ART? #${getEpisodeNumber()}`;
-        
-        // Function to show content
-        function showContent(data) {
-            debug(`Showing: ${data.artist}`);
-            artistName.textContent = data.artist || '';
-            songTitle.textContent = data.songTitle || '';
-            writerName.textContent = data.songWriter ? `Written by ${data.songWriter}` : '';
-            content.classList.add('visible');
-        }
-        
-        // Function to hide content
-        function hideContent() {
-            debug('Hiding content');
-            content.classList.remove('visible');
-        }
-        
-        // Connect to SSE
-        let eventSource = null;
-        let reconnectTimer = null;
-        
-        function connect() {
-            debug('Connecting to server...');
+
+        // Clear performer info back to defaults
+        function clearPerformer() {
+            console.log('Clearing performer info');
             
-            // Clean up existing connection
-            if (eventSource) {
-                eventSource.close();
-            }
+            document.getElementById('episodeTitle').textContent = `WHAT IS ART? #${getEpisodeNumber()}`;
+            document.getElementById('artistName').textContent = 'LIVE NOW';
+            document.getElementById('songTitle').textContent = 'Open Mic Performance';
+            document.getElementById('writerLine').textContent = 'What Is Art? • Maker Radio';
+        }
+
+        // Show intermission
+        function showIntermission(message) {
+            console.log('Showing intermission');
             
+            document.getElementById('episodeTitle').textContent = `WHAT IS ART? #${getEpisodeNumber()}`;
+            document.getElementById('artistName').textContent = 'INTERMISSION';
+            document.getElementById('songTitle').textContent = 'We\'ll be right back!';
+            document.getElementById('writerLine').textContent = message || 'What Is Art? • Maker Radio';
+        }
+
+        // Connect to server for live updates (optional)
+        function connectToServer() {
             try {
-                eventSource = new EventSource('http://localhost:3001/events');
-                
-                eventSource.onopen = function() {
-                    debug('Connected!');
-                    // Clear reconnect timer
-                    if (reconnectTimer) {
-                        clearTimeout(reconnectTimer);
-                        reconnectTimer = null;
-                    }
-                };
+                const eventSource = new EventSource('/events');
                 
                 eventSource.onmessage = function(event) {
-                    debug('Message: ' + event.data);
                     try {
                         const data = JSON.parse(event.data);
+                        console.log('Server update:', data);
                         
-                        // Check if we should hide
-                        if (data.action === 'hide' || data.clear || data.hide) {
-                            hideContent();
-                        }
-                        // Check if we have performer data
-                        else if (data.artist) {
-                            showContent(data);
+                        if (data.type === 'performer') {
+                            updatePerformer(data);
+                        } else if (data.type === 'clear') {
+                            clearPerformer();
+                        } else if (data.type === 'intermission') {
+                            showIntermission(data.message);
                         }
                     } catch (e) {
-                        debug('Parse error: ' + e.message);
+                        console.log('Non-JSON server message:', event.data);
                     }
                 };
                 
-                eventSource.onerror = function() {
-                    debug('Connection error - will retry in 2s');
-                    eventSource.close();
-                    hideContent();
-                    
-                    // Reconnect after 2 seconds
-                    if (!reconnectTimer) {
-                        reconnectTimer = setTimeout(connect, 2000);
-                    }
+                eventSource.onerror = function(error) {
+                    console.log('Server connection error, using defaults');
                 };
                 
-            } catch (e) {
-                debug('Failed to connect: ' + e.message);
-                // Retry in 2 seconds
-                if (!reconnectTimer) {
-                    reconnectTimer = setTimeout(connect, 2000);
-                }
+                console.log('Connected to server for live updates');
+            } catch (error) {
+                console.log('Server not available, using static content');
             }
         }
-        
-        // Start connection
-        connect();
-        
-        // Also fetch current state immediately
-        fetch('http://localhost:3001/current-performer')
-            .then(response => response.json())
-            .then(data => {
-                debug('Current performer: ' + JSON.stringify(data));
-                if (data && data.artist) {
-                    showContent(data);
-                } else {
-                    hideContent();
-                }
-            })
-            .catch(err => {
-                debug('Failed to fetch current performer: ' + err.message);
-            });
-        
-        // Manual controls for testing
-        window.showLowerThird = function(artist, song, writer) {
-            showContent({
-                artist: artist || 'Test Artist',
-                songTitle: song || 'Test Song',
-                songWriter: writer || 'Test Writer'
-            });
-        };
-        
-        window.hideLowerThird = function() {
-            hideContent();
-        };
-        
-        // Enable debug
-        window.enableDebug = function() {
-            document.getElementById('debug').style.display = 'block';
-        };
-        
-        debug('Ready');
+
+        // Make functions available globally for console testing
+        window.updatePerformer = updatePerformer;
+        window.clearPerformer = clearPerformer;
+        window.showIntermission = showIntermission;
+
+        // Ensure lower thirds stay visible
+        function enforceVisibility() {
+            const lowerThird = document.querySelector('.lower-third');
+            if (lowerThird) {
+                lowerThird.style.visibility = 'visible';
+                lowerThird.style.opacity = '1';
+                lowerThird.style.display = 'flex';
+            }
+        }
+
+        // Run visibility enforcement every second
+        setInterval(enforceVisibility, 1000);
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Lower thirds initialized');
+            enforceVisibility();
+            connectToServer();
+        });
+
+        // Handle logo loading
+        document.getElementById('logoImage').addEventListener('load', function() {
+            console.log('Logo loaded successfully');
+        });
+
+        document.getElementById('logoImage').addEventListener('error', function() {
+            console.log('Logo failed to load, showing text fallback');
+        });
     </script>
-</body>
-</html>

@@ -5,7 +5,7 @@
  * Features:
  * - Create individual YouTube broadcasts for each song
  * - Automatic lower thirds updates when broadcasts go live
- * - OBS WebSocket integration
+ * - OBS WebSocket integration for instant start/stop detection
  * - Google Sheets performer data sync
  * - OPTIMIZED: Fast YouTube API response time tracking
  * - BULK DELETE: Select multiple completed broadcasts for deletion
@@ -524,6 +524,56 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
     });
   };
 
+  /**
+   * Find the active broadcast that's currently being streamed to
+   * Looks for broadcasts in "ready" status that are about to go live
+   */
+  const findActiveBroadcastForStream = async () => {
+    try {
+      const result = await youtubeService.listBroadcasts(10);
+      
+      if (!result.success) {
+        console.error('Could not fetch broadcasts to find active stream');
+        return null;
+      }
+      
+      // Look for broadcasts that are ready to stream (most likely candidates)
+      const readyBroadcasts = result.broadcasts.filter(
+        broadcast => broadcast.status.lifeCycleStatus === 'ready'
+      );
+      
+      // If we have ready broadcasts, find the most recently created one
+      // (most likely to be the one selected in OBS)
+      if (readyBroadcasts.length > 0) {
+        const mostRecent = readyBroadcasts.sort((a, b) => {
+          const dateA = new Date(a.snippet.publishedAt);
+          const dateB = new Date(b.snippet.publishedAt);
+          return dateB - dateA; // Most recent first
+        })[0];
+        
+        console.log(`📍 [${new Date().toISOString()}] Selected most recent ready broadcast: "${mostRecent.snippet.title}"`);
+        return mostRecent;
+      }
+      
+      // Fallback: Look for any testing broadcasts
+      const testingBroadcasts = result.broadcasts.filter(
+        broadcast => broadcast.status.lifeCycleStatus === 'testing'
+      );
+      
+      if (testingBroadcasts.length > 0) {
+        console.log(`📍 [${new Date().toISOString()}] Found testing broadcast: "${testingBroadcasts[0].snippet.title}"`);
+        return testingBroadcasts[0];
+      }
+      
+      console.log(`📍 [${new Date().toISOString()}] No ready or testing broadcasts found`);
+      return null;
+      
+    } catch (error) {
+      console.error('Error finding active broadcast:', error);
+      return null;
+    }
+  };
+
   // ===== LIVE BROADCAST MONITORING =====
   
   /**
@@ -722,11 +772,17 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
     };
   }, []);
 
-  // Monitor for live broadcasts when YouTube is connected
+  // Monitor for live broadcasts when YouTube is connected (only if OBS not handling it)
   useEffect(() => {
     if (!youtubeSignedIn) return;
     
-    console.log(`🎬 [${new Date().toISOString()}] Starting YouTube broadcast monitoring...`);
+    // If OBS is connected, let OBS handle the monitoring for faster response
+    if (obsConnected) {
+      console.log(`🎬 [${new Date().toISOString()}] OBS connected - using OBS monitoring instead of YouTube polling`);
+      return;
+    }
+    
+    console.log(`🎬 [${new Date().toISOString()}] Starting YouTube broadcast monitoring (OBS not connected)...`);
     
     // Check for live broadcasts every 1 second for faster detection
     const interval = setInterval(async () => {
@@ -740,7 +796,115 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
       console.log(`🎬 [${new Date().toISOString()}] Stopping YouTube broadcast monitoring`);
       clearInterval(interval);
     };
-  }, [youtubeSignedIn, lastLiveBroadcastId]);
+  }, [youtubeSignedIn, obsConnected, lastLiveBroadcastId]);
+
+  // Monitor OBS streaming status for instant lower thirds start/stop
+  useEffect(() => {
+    if (!obsConnected || !youtubeSignedIn) return;
+    
+    console.log(`🎛️ [${new Date().toISOString()}] Starting OBS streaming status monitoring...`);
+    
+    let wasStreaming = false;
+    
+    const checkOBSStreaming = async () => {
+      try {
+        const streamStatus = await obsWebSocketService.getStreamingStatus();
+        
+        if (streamStatus) {
+          const isStreamingNow = streamStatus.streaming;
+          
+          // STREAM STARTED: If we weren't streaming but now we are
+          if (!wasStreaming && isStreamingNow) {
+            console.log(`🚀 [${new Date().toISOString()}] OBS started streaming - finding active broadcast for lower thirds!`);
+            
+            try {
+              // Find the currently selected broadcast for this stream
+              const activeBroadcast = await findActiveBroadcastForStream();
+              
+              if (activeBroadcast) {
+                console.log(`📺 [${new Date().toISOString()}] Found active broadcast: "${activeBroadcast.snippet.title}"`);
+                
+                // Parse broadcast data for lower thirds
+                const parseStart = Date.now();
+                const titleMatch = activeBroadcast.snippet.title.match(/What Is Art\? #\d+ \| (.+) \| (.+)$/);
+                
+                if (titleMatch) {
+                  const [, artist, songTitle] = titleMatch;
+                  const description = activeBroadcast.snippet.description || '';
+                  const writerMatch = description.match(/Written by: (.+)/m);
+                  const timeSlotMatch = description.match(/Time Slot: (.+)/m);
+                  
+                  const performerData = {
+                    artist: artist.trim(),
+                    songTitle: songTitle.trim(),
+                    songWriter: writerMatch ? writerMatch[1].trim() : '',
+                    timeSlot: timeSlotMatch ? timeSlotMatch[1].trim() : '',
+                    isIntermission: false
+                  };
+                  
+                  const parseTime = Date.now() - parseStart;
+                  console.log(`🎭 [${new Date().toISOString()}] Parsed performer data in ${parseTime}ms:`, performerData);
+                  
+                  // Update lower thirds immediately
+                  const lowerThirdsStart = Date.now();
+                  await lowerThirdsService.updatePerformer(performerData);
+                  const lowerThirdsTime = Date.now() - lowerThirdsStart;
+                  
+                  console.log(`✅ [${new Date().toISOString()}] Lower thirds updated via OBS start in ${lowerThirdsTime}ms`);
+                  
+                  // Track the broadcast
+                  setLastLiveBroadcastId(activeBroadcast.id);
+                  setStreamingBroadcastId(activeBroadcast.id);
+                  setStatus(`🚀 Streaming started: ${performerData.artist} - ${performerData.songTitle}`);
+                } else {
+                  console.error(`❌ [${new Date().toISOString()}] Could not parse broadcast title: "${activeBroadcast.snippet.title}"`);
+                }
+              } else {
+                console.log(`⚠️ [${new Date().toISOString()}] No active broadcast found - streaming without lower thirds`);
+                setStatus('🚀 Streaming started - No broadcast selected');
+              }
+            } catch (error) {
+              console.error(`❌ [${new Date().toISOString()}] Error starting lower thirds via OBS:`, error);
+            }
+          }
+          
+          // STREAM STOPPED: If we were streaming but now we're not, and we have lower thirds showing
+          if (wasStreaming && !isStreamingNow && lastLiveBroadcastId) {
+            console.log(`🛑 [${new Date().toISOString()}] OBS stopped streaming - clearing lower thirds immediately!`);
+            
+            try {
+              const clearStart = Date.now();
+              await lowerThirdsService.clearPerformer();
+              const clearTime = Date.now() - clearStart;
+              console.log(`🧹 [${new Date().toISOString()}] Lower thirds cleared via OBS stop in ${clearTime}ms`);
+              
+              // Reset tracking variables
+              setLastLiveBroadcastId(null);
+              setStreamingBroadcastId(null);
+              setStatus('🛑 Stream stopped in OBS - Lower thirds cleared');
+            } catch (error) {
+              console.error(`❌ [${new Date().toISOString()}] Error clearing lower thirds via OBS stop:`, error);
+            }
+          }
+          
+          wasStreaming = isStreamingNow;
+        }
+      } catch (error) {
+        console.error(`❌ [${new Date().toISOString()}] Error checking OBS streaming status:`, error);
+      }
+    };
+    
+    // Check OBS streaming status every 1 second for faster response
+    const obsInterval = setInterval(checkOBSStreaming, 1000);
+    
+    // Initial check
+    checkOBSStreaming();
+    
+    return () => {
+      console.log(`🎛️ [${new Date().toISOString()}] Stopping OBS streaming status monitoring`);
+      clearInterval(obsInterval);
+    };
+  }, [obsConnected, youtubeSignedIn, lastLiveBroadcastId]);
 
   // ===== COMPUTED VALUES =====
   
@@ -934,7 +1098,7 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
         </div>
         
         {/* Auto Lower Thirds Status */}
-        {youtubeSignedIn && (
+        {youtubeSignedIn && obsConnected && (
           <div style={{
             marginTop: '15px',
             padding: '10px',
@@ -944,12 +1108,32 @@ const SimplifiedStaffDashboard = ({ onLogout }) => {
             fontSize: '14px',
             color: '#E1BEE7'
           }}>
-            🎯 <strong>Auto Lower Thirds:</strong> Active - Monitoring for live broadcasts every 2 seconds
+            🎯 <strong>Auto Lower Thirds:</strong> Active - Using OBS WebSocket for instant response
             {lastLiveBroadcastId && 
               <span style={{ marginLeft: '10px', color: '#4CAF50' }}>
                 🔴 Currently showing performer info
               </span>
             }
+            <div style={{ marginTop: '5px', fontSize: '12px', color: '#aaa' }}>
+              Lower thirds appear when OBS starts streaming • Clear when OBS stops streaming
+            </div>
+          </div>
+        )}
+        
+        {youtubeSignedIn && !obsConnected && (
+          <div style={{
+            marginTop: '15px',
+            padding: '10px',
+            background: 'rgba(255, 193, 7, 0.1)',
+            border: '1px solid #FFC107',
+            borderRadius: '8px',
+            fontSize: '14px',
+            color: '#FFF8E1'
+          }}>
+            ⚠️ <strong>Auto Lower Thirds:</strong> YouTube only - Connect OBS for instant response
+            <div style={{ marginTop: '5px', fontSize: '12px', color: '#aaa' }}>
+              Currently using YouTube API polling (slower response)
+            </div>
           </div>
         )}
       </div>
