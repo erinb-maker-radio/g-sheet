@@ -169,101 +169,100 @@
             if (data) {
                 episodeTitle.textContent = `WHAT IS ART? #${getEpisodeNumber()}`;
                 artistName.textContent = (data.artist || 'LIVE NOW').toUpperCase();
-                songTitle.textContent = data.songTitle || data.song?.title || 'Open Mic Performance';
+                songTitle.textContent = data.songTitle || data.title || 'Open Mic Performance';
                 
-                // Handle writer line
-                const writer = data.songWriter || data.song?.writer || data.writer;
-                if (writer) {
-                    writerLine.textContent = `Written by: ${writer}`;
+                if (data.songWriter || data.writer) {
+                    writerLine.textContent = `Written by ${data.songWriter || data.writer}`;
                 } else {
                     writerLine.textContent = 'What Is Art? • Maker Radio';
                 }
             }
         }
 
-        // Clear performer info back to defaults
+        // Clear performer information
         function clearPerformer() {
-            console.log('Clearing performer info');
-            
+            console.log('Clearing performer');
             document.getElementById('episodeTitle').textContent = `WHAT IS ART? #${getEpisodeNumber()}`;
             document.getElementById('artistName').textContent = 'LIVE NOW';
             document.getElementById('songTitle').textContent = 'Open Mic Performance';
             document.getElementById('writerLine').textContent = 'What Is Art? • Maker Radio';
         }
 
-        // Show intermission
-        function showIntermission(message) {
-            console.log('Showing intermission');
-            
-            document.getElementById('episodeTitle').textContent = `WHAT IS ART? #${getEpisodeNumber()}`;
-            document.getElementById('artistName').textContent = 'INTERMISSION';
-            document.getElementById('songTitle').textContent = 'We\'ll be right back!';
-            document.getElementById('writerLine').textContent = message || 'What Is Art? • Maker Radio';
-        }
+        // Manual update functions for testing
+        window.updateArtist = function(artist, song, writer) {
+            updatePerformer({
+                artist: artist,
+                songTitle: song,
+                songWriter: writer
+            });
+        };
 
-        // Connect to server for live updates (optional)
+        window.clearArtist = function() {
+            clearPerformer();
+        };
+
+        // Connect to server for real-time updates (optional)
+        let eventSource = null;
+        let reconnectTimeout = null;
+
         function connectToServer() {
             try {
-                const eventSource = new EventSource('/events');
+                eventSource = new EventSource('http://localhost:3001/events');
                 
+                eventSource.onopen = function() {
+                    console.log('Connected to lower thirds server');
+                    clearTimeout(reconnectTimeout);
+                };
+
                 eventSource.onmessage = function(event) {
                     try {
                         const data = JSON.parse(event.data);
-                        console.log('Server update:', data);
+                        console.log('Received server update:', data);
                         
-                        if (data.type === 'performer') {
-                            updatePerformer(data);
+                        if (data.type === 'update' && data.performer) {
+                            updatePerformer(data.performer);
                         } else if (data.type === 'clear') {
                             clearPerformer();
-                        } else if (data.type === 'intermission') {
-                            showIntermission(data.message);
                         }
-                    } catch (e) {
-                        console.log('Non-JSON server message:', event.data);
+                    } catch (error) {
+                        console.error('Error processing server message:', error);
                     }
                 };
-                
+
                 eventSource.onerror = function(error) {
-                    console.log('Server connection error, using defaults');
+                    console.error('Server connection error:', error);
+                    eventSource.close();
+                    
+                    // Attempt to reconnect after 5 seconds
+                    reconnectTimeout = setTimeout(connectToServer, 5000);
                 };
-                
-                console.log('Connected to server for live updates');
             } catch (error) {
-                console.log('Server not available, using static content');
+                console.error('Failed to connect to server:', error);
+                // Continue to work without server
             }
         }
 
-        // Make functions available globally for console testing
-        window.updatePerformer = updatePerformer;
-        window.clearPerformer = clearPerformer;
-        window.showIntermission = showIntermission;
+        // Try to connect to server
+        connectToServer();
 
-        // Ensure lower thirds stay visible
-        function enforceVisibility() {
+        // Ensure overlay is always visible
+        setInterval(() => {
             const lowerThird = document.querySelector('.lower-third');
             if (lowerThird) {
                 lowerThird.style.visibility = 'visible';
                 lowerThird.style.opacity = '1';
                 lowerThird.style.display = 'flex';
             }
-        }
+        }, 1000);
 
-        // Run visibility enforcement every second
-        setInterval(enforceVisibility, 1000);
-
-        // Initialize when page loads
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('Lower thirds initialized');
-            enforceVisibility();
-            connectToServer();
-        });
-
-        // Handle logo loading
-        document.getElementById('logoImage').addEventListener('load', function() {
-            console.log('Logo loaded successfully');
-        });
-
-        document.getElementById('logoImage').addEventListener('error', function() {
-            console.log('Logo failed to load, showing text fallback');
+        // Keyboard shortcuts for testing
+        document.addEventListener('keydown', function(e) {
+            if (e.ctrlKey && e.key === '1') {
+                updateArtist('Test Artist', 'Test Song', 'Test Writer');
+            } else if (e.ctrlKey && e.key === '0') {
+                clearArtist();
+            }
         });
     </script>
+</body>
+</html>

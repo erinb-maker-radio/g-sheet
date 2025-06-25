@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Coming Up Next - What Is Art?</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            width: 1920px;
+            height: 1080px;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        /* Animated background pattern */
+        body::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                radial-gradient(circle at 25% 25%, rgba(255, 255, 255, 0.1) 2px, transparent 2px),
+                radial-gradient(circle at 75% 75%, rgba(255, 255, 255, 0.1) 2px, transparent 2px);
+            background-size: 100px 100px;
+            animation: float 20s ease-in-out infinite;
+            opacity: 0.5;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-20px) rotate(2deg); }
+        }
+
+        .container {
+            text-align: center;
+            z-index: 10;
+            position: relative;
+            max-width: 1400px;
+            padding: 40px;
+        }
+
+        .main-title {
+            font-size: 72px;
+            font-weight: bold;
+            color: #ffffff;
+            text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.8);
+            margin-bottom: 30px;
+            letter-spacing: 3px;
+            animation: glow 2s ease-in-out infinite alternate;
+        }
+
+        @keyframes glow {
+            from { text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.8), 0 0 20px rgba(255, 255, 255, 0.3); }
+            to { text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.8), 0 0 30px rgba(255, 255, 255, 0.5); }
+        }
+
+        .next-performer {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+            padding: 60px;
+            margin: 40px 0;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .artist-name {
+            font-size: 64px;
+            font-weight: bold;
+            color: #e91e63;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+            margin-bottom: 20px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .song-title {
+            font-size: 48px;
+            font-style: italic;
+            color: #ffffff;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+            margin-bottom: 15px;
+        }
+
+        .time-slot {
+            font-size: 36px;
+            color: #ffc107;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+
+        .writer-info {
+            font-size: 28px;
+            color: #ffffff;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+            font-style: italic;
+            opacity: 0.9;
+        }
+
+        .show-info {
+            margin-top: 50px;
+            font-size: 28px;
+            color: #ffffff;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+            opacity: 0.8;
+        }
+
+        .logo-container {
+            position: absolute;
+            bottom: 40px;
+            right: 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .logo-image {
+            max-width: 200px;
+            max-height: 150px;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+            filter: drop-shadow(3px 3px 6px rgba(0, 0, 0, 0.8));
+            opacity: 0.9;
+        }
+
+        .logo-fallback {
+            font-size: 24px;
+            font-weight: bold;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+            text-align: center;
+            display: none;
+        }
+
+        .logo-image.failed + .logo-fallback {
+            display: block;
+        }
+
+        .logo-image.failed {
+            display: none;
+        }
+
+        /* Fade in animation */
+        .container {
+            animation: fadeIn 1s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Pulsing animation for "Coming Up Next" */
+        .main-title {
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.02); }
+        }
+
+        /* Hidden by default */
+        .overlay-hidden {
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.5s ease, visibility 0.5s ease;
+        }
+
+        .overlay-visible {
+            opacity: 1;
+            visibility: visible;
+            transition: opacity 0.5s ease, visibility 0.5s ease;
+        }
+    </style>
+</head>
+<body class="overlay-hidden">
+    <div class="container">
+        <div class="main-title">COMING UP NEXT</div>
+        
+        <div class="next-performer">
+            <div class="time-slot" id="timeSlot">7:30 PM</div>
+            <div class="artist-name" id="artistName">NEXT PERFORMER</div>
+            <div class="song-title" id="songTitle">Getting Ready...</div>
+            <div class="writer-info" id="writerInfo">What Is Art? • Open Mic</div>
+        </div>
+        
+        <div class="show-info">
+            <div>WHAT IS ART? • EPISODE #<span id="episodeNumber">124</span></div>
+            <div style="margin-top: 10px; font-size: 24px;">Live from Maker Nexus • Every Thursday 7:30 PM</div>
+        </div>
+    </div>
+
+    <div class="logo-container">
+        <img 
+            class="logo-image" 
+            id="logoImage"
+            src="./MakerRadioLogo2.png"
+            alt="Maker Radio Logo"
+            onerror="this.classList.add('failed')"
+        >
+        <div class="logo-fallback">MAKER RADIO</div>
+    </div>
+
+    <script>
+        // Calculate current episode number
+        function getEpisodeNumber() {
+            const baseDate = new Date('2025-05-22');
+            const baseEpisode = 120;
+            const currentDate = new Date();
+            const weeksDiff = Math.floor((currentDate - baseDate) / (7 * 24 * 60 * 60 * 1000));
+            return baseEpisode + weeksDiff;
+        }
+
+        // Initialize episode number
+        document.getElementById('episodeNumber').textContent = getEpisodeNumber();
+
+        // Update next performer information
+        function updateNextPerformer(data) {
+            console.log('Updating next performer:', data);
+            
+            const timeSlot = document.getElementById('timeSlot');
+            const artistName = document.getElementById('artistName');
+            const songTitle = document.getElementById('songTitle');
+            const writerInfo = document.getElementById('writerInfo');
+
+            if (data) {
+                // Time slot
+                if (data.timeSlot) {
+                    timeSlot.textContent = data.timeSlot;
+                    timeSlot.style.display = 'block';
+                } else {
+                    timeSlot.style.display = 'none';
+                }
+
+                // Artist name
+                artistName.textContent = (data.artist || 'NEXT PERFORMER').toUpperCase();
+                
+                // Song title
+                songTitle.textContent = data.songTitle || data.song?.title || 'Getting Ready...';
+                
+                // Writer info
+                const writer = data.songWriter || data.song?.writer || data.writer;
+                if (writer) {
+                    writerInfo.textContent = `Written by: ${writer}`;
+                } else {
+                    writerInfo.textContent = 'What Is Art? • Open Mic';
+                }
+            }
+        }
+
+        // Show the overlay with fade in
+        function showOverlay() {
+            console.log('Showing coming up next overlay');
+            document.body.classList.remove('overlay-hidden');
+            document.body.classList.add('overlay-visible');
+        }
+
+        // Hide the overlay with fade out
+        function hideOverlay() {
+            console.log('Hiding coming up next overlay');
+            document.body.classList.remove('overlay-visible');
+            document.body.classList.add('overlay-hidden');
+        }
+
+        // Connect to server for updates
+        function connectToServer() {
+            try {
+                const eventSource = new EventSource('/events');
+                
+                eventSource.onmessage = function(event) {
+                    try {
+                        const data = JSON.parse(event.data);
+                        console.log('Server update:', data);
+                        
+                        if (data.type === 'next-performer') {
+                            updateNextPerformer(data);
+                        } else if (data.type === 'show-next') {
+                            showOverlay();
+                        } else if (data.type === 'hide-next') {
+                            hideOverlay();
+                        }
+                    } catch (e) {
+                        console.log('Non-JSON server message:', event.data);
+                    }
+                };
+                
+                eventSource.onerror = function(error) {
+                    console.log('Server connection error');
+                };
+                
+                console.log('Connected to server for coming up next updates');
+            } catch (error) {
+                console.log('Server not available');
+            }
+        }
+
+        // Make functions available globally
+        window.updateNextPerformer = updateNextPerformer;
+        window.showOverlay = showOverlay;
+        window.hideOverlay = hideOverlay;
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Coming Up Next overlay initialized');
+            connectToServer();
+        });
+
+        // Test function for manual control
+        window.testShow = function() {
+            updateNextPerformer({
+                artist: 'John Smith',
+                songTitle: 'Amazing Song',
+                timeSlot: '8:00 PM',
+                writer: 'John Smith'
+            });
+            showOverlay();
+        };
+
+        window.testHide = function() {
+            hideOverlay();
+        };
+    </script>
+</body>
+</html>
